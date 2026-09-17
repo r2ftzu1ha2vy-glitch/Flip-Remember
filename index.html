@@ -219,6 +219,8 @@ button:focus-visible{ outline:2px solid var(--foam); outline-offset:4px; }
   transition:border-color .3s ease; }
 .name-input:focus{ border-color:rgba(127,216,196,.5); }
 .cost-tag{ font-size:.74rem; color:var(--text-dim); letter-spacing:.05em; }
+.divider-row{ display:flex; align-items:center; gap:12px; width:100%; max-width:340px; color:var(--text-dim); font-size:.75rem; letter-spacing:.08em; margin-top:4px; }
+.divider-row .divider-line{ flex:1; height:1px; background:var(--line); }
 .cost-tag b{ color:var(--sand); font-weight:500; }
 .btn-small{ padding:11px 20px; font-size:.85rem; }
 .btn-small[disabled]{ opacity:.35; cursor:not-allowed; }
@@ -364,6 +366,11 @@ button:focus-visible{ outline:2px solid var(--foam); outline-offset:4px; }
         <button class="btn btn-primary btn-small" id="bSignUp">Sign up</button>
         <button class="btn btn-ghost btn-small" id="bSignIn">Sign in</button>
       </div>
+      <div class="divider-row"><span class="divider-line"></span>or<span class="divider-line"></span></div>
+      <button class="btn btn-ghost btn-small" id="bGoogleSignIn" style="width:100%; display:flex; align-items:center; justify-content:center; gap:10px">
+        <svg width="16" height="16" viewBox="0 0 48 48" aria-hidden="true"><path fill="#EA4335" d="M24 9.5c3.5 0 6.6 1.2 9.1 3.6l6.8-6.8C35.9 2.4 30.3 0 24 0 14.6 0 6.5 5.4 2.6 13.2l7.9 6.1C12.4 13 17.7 9.5 24 9.5z"/><path fill="#4285F4" d="M46.5 24.5c0-1.6-.1-3.1-.4-4.5H24v9h12.7c-.5 3-2.2 5.5-4.7 7.2l7.4 5.7C43.9 37.7 46.5 31.6 46.5 24.5z"/><path fill="#FBBC05" d="M10.5 19.3c-.5 1.4-.7 2.9-.7 4.5s.3 3.1.7 4.5l-7.9 6.1C1 30.9 0 27.6 0 24s1-6.9 2.6-9.9l7.9 6.2z"/><path fill="#34A853" d="M24 48c6.3 0 11.6-2.1 15.5-5.6l-7.4-5.7c-2.1 1.4-4.8 2.2-8.1 2.2-6.3 0-11.6-3.5-14.3-8.7l-7.9 6.1C6.5 42.6 14.6 48 24 48z"/></svg>
+        Continue with Google
+      </button>
       <span class="note" id="acctNote"></span>
     </div>
 
@@ -376,9 +383,9 @@ button:focus-visible{ outline:2px solid var(--foam); outline-offset:4px; }
     <div class="profile-card profile-section">
       <span class="block-title">PROFILE PICTURE</span>
       <div class="ava-current" id="avaCurrent"><img id="avaCurrentImg" src="" alt="" style="display:none"></div>
-      <div class="name-row">
-        <input class="name-input" id="avaUrlInput" autocomplete="off" spellcheck="false" placeholder="Paste an image URL">
-      </div>
+      <input type="file" id="avaFileInput" accept="image/png,image/jpeg,image/webp,image/gif" style="display:none">
+      <button class="btn btn-ghost btn-small" id="bChooseFile">Choose image…</button>
+      <span class="note" id="avaFileName"></span>
       <span class="cost-tag">Changing your profile picture costs <b>50 memos</b>.</span>
       <button class="btn btn-primary btn-small" id="bSaveAvatar" disabled>Set avatar — 50 memos</button>
       <span class="note" id="avaNote"></span>
@@ -597,14 +604,20 @@ var Profile = (function(){
     var local = get();
     return userRef.once("value").then(function(snap){
       var remote = snap.val();
+      var localIsCustomized = local.avatar && local.avatar !== DEFAULT_AVATAR;
+      var googleAvatar = user.photoURL || null;
       if(remote){
         data = {
-          avatar: remote.avatar || local.avatar || DEFAULT_AVATAR,
+          avatar: remote.avatar || local.avatar || googleAvatar || DEFAULT_AVATAR,
           name:   remote.name   || local.name,
           memos:  (remote.memos || 0) + (local.memos || 0)
         };
       }else{
-        data = { avatar: local.avatar || DEFAULT_AVATAR, name: local.name, memos: local.memos || 0 };
+        data = {
+          avatar: localIsCustomized ? local.avatar : (googleAvatar || local.avatar || DEFAULT_AVATAR),
+          name:   local.name,
+          memos:  local.memos || 0
+        };
       }
       return userRef.set({ avatar:data.avatar, name:data.name, memos:data.memos, email:user.email || null });
     }).then(function(){
@@ -642,7 +655,7 @@ var turn = "you", locked = false, over = false, flipCount = 0;
 var aiMap = new Map();
 var timers = [];
 
-var db = null, auth = null, fbReady = false, started = false;
+var db = null, auth = null, googleProvider = null, fbReady = false, started = false;
 var room = { code:null, role:null, ref:null, seenMove:0, seenResult:0, rematchMine:false };
 
 function $(id){ return document.getElementById(id); }
@@ -1104,6 +1117,7 @@ function initFirebase(){
     db = firebase.database();
     if(firebase.auth){
       auth = firebase.auth();
+      googleProvider = new firebase.auth.GoogleAuthProvider();
       auth.onAuthStateChanged(function(user){
         if(user && !user.isAnonymous) Profile.attachAccount(user);
         else Profile.detachAccount();
@@ -1538,16 +1552,73 @@ document.addEventListener("DOMContentLoaded", function(){
   /* ===== profile / memos wiring ===== */
   Profile.load(); Profile.renderChip();
 
-  var avaUrlInput = $("avaUrlInput");
-  var pendingAvatar = null;
-  avaUrlInput.addEventListener("input", function(){
-    var v = avaUrlInput.value.trim();
-    var p = Profile.get();
-    pendingAvatar = v;
-    var valid = /^https?:\/\/\S+\.(png|jpe?g|gif|webp|svg)(\?.*)?$/i.test(v);
-    var same = v === p.avatar;
-    $("bSaveAvatar").disabled = !valid || same;
-    $("avaNote").textContent = !v ? "" : same ? "That's already your profile picture." : (!valid ? "Enter a direct image URL (png, jpg, gif, webp, svg)." : "");
+  var avaFileInput = $("avaFileInput");
+  var pendingAvatar = null;      // resolved avatar data: URL once processing finishes
+
+  var MAX_AVATAR_DIM = 200;      // px, square crop/resize target
+  var MAX_DATAURL_BYTES = 140000; // ~140KB cap — keeps Realtime DB nodes and localStorage entries small and fast
+
+  function readFileToImage(file){
+    return new Promise(function(resolve, reject){
+      var reader = new FileReader();
+      reader.onerror = function(){ reject(new Error("Could not read that file.")); };
+      reader.onload = function(){
+        var img = new Image();
+        img.onerror = function(){ reject(new Error("That file isn't a readable image.")); };
+        img.onload = function(){ resolve(img); };
+        img.src = reader.result;
+      };
+      reader.readAsDataURL(file);
+    });
+  }
+
+  function squareResizedDataURL(img, quality){
+    var side = Math.min(img.naturalWidth, img.naturalHeight);
+    var sx = (img.naturalWidth - side) / 2, sy = (img.naturalHeight - side) / 2;
+    var canvas = document.createElement("canvas");
+    canvas.width = MAX_AVATAR_DIM; canvas.height = MAX_AVATAR_DIM;
+    var ctx = canvas.getContext("2d");
+    ctx.drawImage(img, sx, sy, side, side, 0, 0, MAX_AVATAR_DIM, MAX_AVATAR_DIM);
+    return canvas.toDataURL("image/jpeg", quality);
+  }
+
+  $("bChooseFile").addEventListener("click", function(){ Sound.init(); avaFileInput.click(); });
+
+  avaFileInput.addEventListener("change", function(){
+    var file = avaFileInput.files && avaFileInput.files[0];
+    if(!file) return;
+    if(file.size > 8 * 1024 * 1024){
+      $("avaNote").textContent = "That image is too large — pick one under 8MB.";
+      avaFileInput.value = "";
+      return;
+    }
+    $("avaFileName").textContent = "Processing " + file.name + "…";
+    $("bSaveAvatar").disabled = true;
+    pendingAvatar = null;
+
+    readFileToImage(file).then(function(img){
+      // Compress until it fits comfortably in a database string value.
+      var quality = 0.85;
+      var out = squareResizedDataURL(img, quality);
+      while(out.length > MAX_DATAURL_BYTES && quality > 0.3){
+        quality -= 0.15;
+        out = squareResizedDataURL(img, quality);
+      }
+      if(out.length > MAX_DATAURL_BYTES) throw new Error("Even compressed, that image is too large to store. Try a smaller or simpler image.");
+      return out;
+    }).then(function(dataUrl){
+      pendingAvatar = dataUrl;
+      $("avaCurrentImg").src = dataUrl;
+      $("avaCurrentImg").style.display = "";
+      $("avaFileName").textContent = file.name;
+      $("bSaveAvatar").disabled = false;
+      $("avaNote").textContent = "";
+    }).catch(function(e){
+      $("avaFileName").textContent = "";
+      $("avaNote").textContent = e.message || "Couldn't process that image.";
+      pendingAvatar = null;
+      avaFileInput.value = "";
+    });
   });
 
   function openProfile(){
@@ -1555,8 +1626,9 @@ document.addEventListener("DOMContentLoaded", function(){
     $("profBalance").textContent = p.memos;
     $("avaCurrentImg").src = p.avatar;
     $("avaCurrentImg").style.display = "";
-    pendingAvatar = null;
-    avaUrlInput.value = "";
+    pendingAvatar = null; pendingFile = null;
+    avaFileInput.value = "";
+    $("avaFileName").textContent = "";
     $("bSaveAvatar").disabled = true;
     $("avaNote").textContent = "";
     $("nameInput").value = "";
@@ -1578,7 +1650,7 @@ document.addEventListener("DOMContentLoaded", function(){
   }
 
   function authBusy(b){
-    $("bSignUp").disabled = b; $("bSignIn").disabled = b;
+    $("bSignUp").disabled = b; $("bSignIn").disabled = b; $("bGoogleSignIn").disabled = b;
   }
 
   function authErrorMessage(e){
@@ -1590,6 +1662,9 @@ document.addEventListener("DOMContentLoaded", function(){
       case "auth/wrong-password":
       case "auth/invalid-credential": return "Email or password is incorrect.";
       case "auth/too-many-requests": return "Too many attempts — wait a moment and try again.";
+      case "auth/popup-closed-by-user": return "Google sign-in was closed before finishing.";
+      case "auth/popup-blocked": return "Your browser blocked the Google sign-in popup — allow popups and try again.";
+      case "auth/account-exists-with-different-credential": return "That email is already registered a different way — try signing in with email and password instead.";
       default: return e.message || "Something went wrong. Try again.";
     }
   }
@@ -1637,6 +1712,24 @@ document.addEventListener("DOMContentLoaded", function(){
     }).then(function(){ authBusy(false); });
   });
 
+  $("bGoogleSignIn").addEventListener("click", function(){
+    Sound.init();
+    if(!initFirebase() || !googleProvider){ $("acctNote").textContent = "Firebase isn't configured yet — check the config at the top of the file."; return; }
+    authBusy(true); $("acctNote").textContent = "Opening Google sign-in…";
+    auth.signInWithPopup(googleProvider).then(function(cred){
+      return Profile.attachAccount(cred.user);
+    }).then(function(){
+      $("profBalance").textContent = Profile.get().memos;
+      $("nameInput").placeholder = Profile.get().name;
+      $("avaCurrentImg").src = Profile.get().avatar;
+      refreshAccountPanel();
+      $("acctNote").textContent = "";
+      toast("Signed in with Google.");
+    }).catch(function(e){
+      $("acctNote").textContent = authErrorMessage(e);
+    }).then(function(){ authBusy(false); });
+  });
+
   $("bSignOut").addEventListener("click", function(){
     Sound.init();
     if(auth) auth.signOut();
@@ -1651,18 +1744,20 @@ document.addEventListener("DOMContentLoaded", function(){
   $("bSaveAvatar").addEventListener("click", function(){
     if(!pendingAvatar) return;
     var p = Profile.get();
-    if(pendingAvatar === p.avatar){ $("avaNote").textContent = "That's already your profile picture."; return; }
     if(p.memos < COST_AVATAR){
       $("avaNote").textContent = "Not enough memos — you need " + COST_AVATAR + ", you have " + p.memos + ".";
       Sound.miss();
       return;
     }
+
+    $("bSaveAvatar").disabled = true;
     Profile.spend(COST_AVATAR);
     Profile.setAvatar(pendingAvatar);
     $("avaCurrentImg").src = pendingAvatar;
     $("profBalance").textContent = Profile.get().memos;
-    $("bSaveAvatar").disabled = true;
     $("avaNote").textContent = "Profile picture updated.";
+    pendingAvatar = null;
+    avaFileInput.value = ""; $("avaFileName").textContent = "";
     Sound.ui();
   });
 
