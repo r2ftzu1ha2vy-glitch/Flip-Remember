@@ -11,6 +11,7 @@
 <!-- Firebase (compat builds — plain script tags, no bundler needed) -->
 <script src="https://cdn.jsdelivr.net/npm/firebase@10.12.2/firebase-app-compat.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/firebase@10.12.2/firebase-database-compat.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/firebase@10.12.2/firebase-auth-compat.js"></script>
 
 <style>
 :root{
@@ -176,10 +177,51 @@ button:focus-visible{ outline:2px solid var(--foam); outline-offset:4px; }
 .petal{ position:fixed; top:-30px; z-index:70; pointer-events:none; animation:fall linear forwards; }
 @keyframes fall{ 0%{transform:translateY(0) rotate(0);opacity:0} 10%{opacity:.75} 100%{transform:translateY(108vh) rotate(320deg);opacity:0} }
 
-.audio-btn{ position:fixed; top:18px; right:18px; z-index:50; width:40px; height:40px; border-radius:50%;
+.top-bar{ position:fixed; top:18px; left:18px; right:18px; z-index:50; display:flex; align-items:center; justify-content:space-between; gap:10px; }
+
+.audio-btn{ position:static; z-index:50; width:40px; height:40px; border-radius:50%; flex:0 0 auto;
   background:rgba(255,255,255,.03); border:1px solid var(--line); display:flex; align-items:center; justify-content:center;
   color:var(--text-dim); backdrop-filter:blur(8px); transition:color .3s,border-color .3s; }
 .audio-btn:hover{ color:var(--text-soft); border-color:var(--line-strong); }
+
+.profile-chip{ display:flex; align-items:center; gap:9px; padding:6px 14px 6px 6px; border-radius:999px;
+  background:rgba(255,255,255,.03); border:1px solid var(--line); backdrop-filter:blur(8px);
+  transition:border-color .3s,background .3s; max-width:220px; }
+.profile-chip:hover{ border-color:var(--line-strong); background:rgba(255,255,255,.06); }
+.profile-chip-ava{ width:28px; height:28px; border-radius:50%; background:rgba(255,255,255,.05); border:1px solid var(--line);
+  display:flex; align-items:center; justify-content:center; font-size:15px; flex:0 0 auto; line-height:1; overflow:hidden; }
+.profile-chip-ava img{ width:100%; height:100%; object-fit:cover; }
+.profile-chip-info{ display:flex; flex-direction:column; align-items:flex-start; gap:1px; min-width:0; }
+.profile-chip-name{ font-size:.76rem; color:var(--text-soft); letter-spacing:.03em; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:120px; }
+.profile-chip-memos{ display:flex; align-items:center; gap:4px; font-size:.72rem; color:var(--sand); font-weight:400; }
+.memos-icon{ width:12px; height:12px; object-fit:contain; flex:0 0 auto; }
+.memos-icon-lg{ width:18px; height:18px; object-fit:contain; flex:0 0 auto; }
+
+/* ===== PROFILE SCREEN ===== */
+.profile-card{ width:100%; max-width:420px; display:flex; flex-direction:column; align-items:center; gap:6px; }
+.profile-balance{ display:flex; align-items:center; gap:8px; padding:10px 20px; border-radius:999px;
+  background:rgba(255,255,255,.035); border:1px solid var(--line); color:var(--sand); font-size:1.05rem; margin-top:18px; }
+.profile-balance svg{ flex:0 0 auto; }
+.profile-section{ width:100%; margin-top:30px; display:flex; flex-direction:column; align-items:center; gap:14px; }
+.ava-current{ width:76px; height:76px; border-radius:50%; background:rgba(255,255,255,.04); border:1px solid var(--line-strong);
+  display:flex; align-items:center; justify-content:center; font-size:38px; line-height:1; overflow:hidden; }
+.ava-current img{ width:100%; height:100%; object-fit:cover; }
+.ava-grid{ display:grid; grid-template-columns:repeat(6,1fr); gap:9px; width:100%; max-width:340px; }
+.ava-opt{ aspect-ratio:1; border-radius:14px; background:rgba(255,255,255,.03); border:1px solid var(--line);
+  display:flex; align-items:center; justify-content:center; font-size:21px; transition:border-color .25s,background .25s,transform .2s; overflow:hidden; padding:0; }
+.ava-opt img{ width:100%; height:100%; object-fit:cover; }
+.ava-opt:hover{ border-color:var(--line-strong); background:rgba(255,255,255,.06); }
+.ava-opt.selected{ border-color:var(--foam); background:rgba(127,216,196,.1); }
+.ava-opt:active{ transform:scale(.92); }
+.name-row{ display:flex; gap:10px; width:100%; max-width:340px; }
+.name-input{ flex:1; padding:13px 16px; font-family:inherit; font-size:.95rem; color:var(--text);
+  background:rgba(255,255,255,.03); border:1px solid var(--line); border-radius:14px; outline:none; letter-spacing:.02em;
+  transition:border-color .3s ease; }
+.name-input:focus{ border-color:rgba(127,216,196,.5); }
+.cost-tag{ font-size:.74rem; color:var(--text-dim); letter-spacing:.05em; }
+.cost-tag b{ color:var(--sand); font-weight:500; }
+.btn-small{ padding:11px 20px; font-size:.85rem; }
+.btn-small[disabled]{ opacity:.35; cursor:not-allowed; }
 
 .toast{ position:fixed; left:50%; bottom:26px; transform:translateX(-50%) translateY(20px);
   z-index:80; padding:13px 24px; border-radius:999px; max-width:calc(100vw - 40px);
@@ -231,15 +273,24 @@ button:focus-visible{ outline:2px solid var(--foam); outline-offset:4px; }
 </defs></svg>
 
 <div id="app">
-  <button class="audio-btn" id="audioBtn" aria-label="Toggle sound">
-    <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
-      <path d="M11 5 6 9H2v6h4l5 4V5z"/>
-      <path id="wave1" d="M15.5 8.5a5 5 0 0 1 0 7"/>
-      <path id="wave2" d="M18.5 5.5a9 9 0 0 1 0 13"/>
-      <line id="mute1" x1="16" y1="9" x2="22" y2="15" style="display:none"/>
-      <line id="mute2" x1="22" y1="9" x2="16" y2="15" style="display:none"/>
-    </svg>
-  </button>
+  <div class="top-bar">
+    <button class="profile-chip" id="bProfile" aria-label="Profile settings">
+      <span class="profile-chip-ava" id="chipAvatar"><img id="chipAvatarImg" src="" alt="" style="display:none"></span>
+      <span class="profile-chip-info">
+        <span class="profile-chip-name" id="chipName">Diver</span>
+        <span class="profile-chip-memos"><img src="https://iili.io/noXdxMG.png" alt="" class="memos-icon"><span id="chipMemos">0</span></span>
+      </span>
+    </button>
+    <button class="audio-btn" id="audioBtn" aria-label="Toggle sound">
+      <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M11 5 6 9H2v6h4l5 4V5z"/>
+        <path id="wave1" d="M15.5 8.5a5 5 0 0 1 0 7"/>
+        <path id="wave2" d="M18.5 5.5a9 9 0 0 1 0 13"/>
+        <line id="mute1" x1="16" y1="9" x2="22" y2="15" style="display:none"/>
+        <line id="mute2" x1="22" y1="9" x2="16" y2="15" style="display:none"/>
+      </svg>
+    </button>
+  </div>
 
   <!-- ===== MENU ===== -->
   <div class="screen" id="s-menu">
@@ -287,6 +338,65 @@ button:focus-visible{ outline:2px solid var(--foam); outline-offset:4px; }
     </div>
 
     <p class="foot-note">Fifteen discs. One sequence. Whoever holds the map wins.</p>
+  </div>
+
+  <!-- ===== PROFILE ===== -->
+  <div class="screen hidden" id="s-profile">
+    <div style="margin-top:7vh"></div>
+    <h2 style="font-weight:200; letter-spacing:.2em; font-size:1.3rem; margin:0">PROFILE</h2>
+    <p class="note" style="margin-top:8px">Earn memos by winning. Spend them here.</p>
+
+    <div class="profile-balance">
+      <img src="https://iili.io/noXxwMB.png" alt="" class="memos-icon-lg">
+      <span id="profBalance">0</span>&nbsp;memos
+    </div>
+
+    <div class="profile-card profile-section" id="acctSignedOut">
+      <span class="block-title">ACCOUNT</span>
+      <p class="note" style="margin:0; max-width:340px">You're playing anonymously — your profile and memos are only saved on this device. Sign up to keep them on any device.</p>
+      <div class="name-row">
+        <input class="name-input" id="acctEmail" type="email" autocomplete="username" spellcheck="false" placeholder="Email">
+      </div>
+      <div class="name-row">
+        <input class="name-input" id="acctPassword" type="password" autocomplete="new-password" spellcheck="false" placeholder="Password (min. 6 characters)">
+      </div>
+      <div class="btn-row" style="margin-top:4px">
+        <button class="btn btn-primary btn-small" id="bSignUp">Sign up</button>
+        <button class="btn btn-ghost btn-small" id="bSignIn">Sign in</button>
+      </div>
+      <span class="note" id="acctNote"></span>
+    </div>
+
+    <div class="profile-card profile-section hidden" id="acctSignedIn">
+      <span class="block-title">ACCOUNT</span>
+      <p class="note" style="margin:0">Signed in as <b style="color:var(--text)" id="acctEmailDisplay"></b>. Your profile syncs across devices.</p>
+      <button class="btn btn-ghost btn-small" id="bSignOut">Sign out</button>
+    </div>
+
+    <div class="profile-card profile-section">
+      <span class="block-title">PROFILE PICTURE</span>
+      <div class="ava-current" id="avaCurrent"><img id="avaCurrentImg" src="" alt="" style="display:none"></div>
+      <div class="name-row">
+        <input class="name-input" id="avaUrlInput" autocomplete="off" spellcheck="false" placeholder="Paste an image URL">
+      </div>
+      <span class="cost-tag">Changing your profile picture costs <b>50 memos</b>.</span>
+      <button class="btn btn-primary btn-small" id="bSaveAvatar" disabled>Set avatar — 50 memos</button>
+      <span class="note" id="avaNote"></span>
+    </div>
+
+    <div class="profile-card profile-section">
+      <span class="block-title">USERNAME</span>
+      <div class="name-row">
+        <input class="name-input" id="nameInput" maxlength="16" autocomplete="off" spellcheck="false" placeholder="Enter a username">
+      </div>
+      <span class="cost-tag">Changing your username costs <b>100 memos</b>.</span>
+      <button class="btn btn-primary btn-small" id="bSaveName" disabled>Set username — 100 memos</button>
+      <span class="note" id="nameNote"></span>
+    </div>
+
+    <div class="btn-row" style="margin-top:36px; margin-bottom:20px">
+      <button class="btn btn-ghost" id="bProfileBack">Back</button>
+    </div>
   </div>
 
   <!-- ===== LOBBY ===== -->
@@ -413,10 +523,116 @@ var FIREBASE_CONFIG = {
 var TOTAL = 15;
 var RING = 2 * Math.PI * 23;
 var DIFF = {
-  easy:   { recall:.22, slip:.30, tMin:650, tMax:1050, note:"A forgetful opponent. It mostly guesses and rarely holds a map." },
-  medium: { recall:.58, slip:.15, tMin:550, tMax:900,  note:"A steady opponent. It remembers about half of what it sees." },
-  hard:   { recall:.90, slip:.07, tMin:450, tMax:800,  note:"A sharp opponent. It remembers nearly every disc it has turned." }
+  easy:   { recall:.22, slip:.30, tMin:220, tMax:420, reward:10, note:"A forgetful opponent. It mostly guesses and rarely holds a map." },
+  medium: { recall:.58, slip:.15, tMin:200, tMax:380, reward:25, note:"A steady opponent. It remembers about half of what it sees." },
+  hard:   { recall:.90, slip:.07, tMin:180, tMax:340, reward:40, note:"A sharp opponent. It remembers nearly every disc it has turned." }
 };
+var ONLINE_REWARD = 50;
+var COST_AVATAR = 50, COST_USERNAME = 100;
+
+/* ===================== profile / memos ===================== */
+/* Anonymous play: profile lives in localStorage only, name defaults to "Player[N]".
+   Signed-up play: profile is mirrored to users/{uid} in Firebase Realtime Database,
+   so memos/avatar/name follow the account across devices. */
+var DEFAULT_AVATAR = "https://iili.io/noXxwMB.png";
+var AVATARS = [DEFAULT_AVATAR];
+
+var Profile = (function(){
+  var KEY = "farProfile";
+  var data = null;
+  var counterKey = "farPlayerNum";
+  var authUser = null;   // firebase.User when signed in, else null
+  var userRef = null;    // db.ref("users/"+uid) when signed in
+
+  function nextPlayerNumber(){
+    try{
+      var n = parseInt(localStorage.getItem(counterKey) || "0", 10) + 1;
+      localStorage.setItem(counterKey, String(n));
+      return n;
+    }catch(e){ return Math.floor(Math.random()*9000)+1000; }
+  }
+
+  function def(){ return { avatar:DEFAULT_AVATAR, name:"Player" + nextPlayerNumber(), memos:0 }; }
+
+  function load(){
+    try{
+      var raw = localStorage.getItem(KEY);
+      data = raw ? Object.assign(def(), JSON.parse(raw)) : def();
+    }catch(e){ data = def(); }
+    return data;
+  }
+
+  function save(){
+    try{ localStorage.setItem(KEY, JSON.stringify(data)); }catch(e){ /* storage unavailable — state stays in memory */ }
+    if(userRef){ userRef.update({ avatar:data.avatar, name:data.name, memos:data.memos }).catch(function(){}); }
+  }
+
+  function get(){ return data || load(); }
+
+  function isSignedIn(){ return !!authUser; }
+  function email(){ return authUser ? authUser.email : null; }
+
+  function addMemos(n){
+    get(); data.memos = Math.max(0, data.memos + n); save(); renderChip();
+    return data.memos;
+  }
+
+  function spend(n){
+    get();
+    if(data.memos < n) return false;
+    data.memos -= n; save(); renderChip();
+    return true;
+  }
+
+  function setAvatar(a){ get(); data.avatar = a; save(); renderChip(); }
+  function setName(n){ get(); data.name = n; save(); renderChip(); }
+
+  // Called once auth state resolves. Merges local + remote so nobody loses memos
+  // by signing up after playing anonymously: remote memos + local memos combine,
+  // remote name/avatar win if set, otherwise local values carry over.
+  function attachAccount(user){
+    authUser = user;
+    if(!user){ userRef = null; renderChip(); return Promise.resolve(); }
+    userRef = db.ref("users/" + user.uid);
+    var local = get();
+    return userRef.once("value").then(function(snap){
+      var remote = snap.val();
+      if(remote){
+        data = {
+          avatar: remote.avatar || local.avatar || DEFAULT_AVATAR,
+          name:   remote.name   || local.name,
+          memos:  (remote.memos || 0) + (local.memos || 0)
+        };
+      }else{
+        data = { avatar: local.avatar || DEFAULT_AVATAR, name: local.name, memos: local.memos || 0 };
+      }
+      return userRef.set({ avatar:data.avatar, name:data.name, memos:data.memos, email:user.email || null });
+    }).then(function(){
+      save();
+      renderChip();
+    }).catch(function(e){
+      console.error("Account sync failed:", e);
+    });
+  }
+
+  function detachAccount(){
+    authUser = null; userRef = null;
+    load(); renderChip();
+  }
+
+  function renderChip(){
+    get();
+    $("chipAvatarImg").src = data.avatar;
+    $("chipAvatarImg").style.display = "";
+    $("chipName").textContent = data.name;
+    $("chipMemos").textContent = data.memos;
+  }
+
+  return {
+    get:get, load:load, addMemos:addMemos, spend:spend, setAvatar:setAvatar, setName:setName,
+    renderChip:renderChip, isSignedIn:isSignedIn, email:email, attachAccount:attachAccount, detachAccount:detachAccount
+  };
+})();
 
 /* ===================== state ===================== */
 var mode = "solo", difficulty = "medium";
@@ -426,7 +642,7 @@ var turn = "you", locked = false, over = false, flipCount = 0;
 var aiMap = new Map();
 var timers = [];
 
-var db = null, fbReady = false, started = false;
+var db = null, auth = null, fbReady = false, started = false;
 var room = { code:null, role:null, ref:null, seenMove:0, seenResult:0, rematchMine:false };
 
 function $(id){ return document.getElementById(id); }
@@ -789,7 +1005,7 @@ function youMiss(i){
       locked = false; turn = "foe"; hud();
       Sound.handoff(false);
       say(mode==="online" ? "Your opponent takes the board." : "The AI takes the board.","foe");
-      if(mode === "solo") later(aiStep, 650);
+      if(mode === "solo") later(aiStep, 300);
     }, 520);
   }, 700);
 }
@@ -829,7 +1045,7 @@ function aiStep(){
       if(over) return;
       aiMap.set(i, discs[i].value);
       discs[i].value === foeTarget ? foeHit(i, true) : foeMiss(i, true);
-    }, 560);
+    }, 260);
   }, cfg.tMin + Math.random()*(cfg.tMax-cfg.tMin));
 }
 
@@ -844,7 +1060,7 @@ function foeHit(i, isAi){
     return;
   }
   say((isAi ? "The AI found " : "Opponent found ") + (foeTarget-1) + ". Hunting " + foeTarget + ".","foe");
-  if(isAi) later(aiStep, 800);
+  if(isAi) later(aiStep, 320);
 }
 
 function foeMiss(i, isAi){
@@ -886,6 +1102,13 @@ function initFirebase(){
   try{
     if(!firebase.apps.length) firebase.initializeApp(FIREBASE_CONFIG);
     db = firebase.database();
+    if(firebase.auth){
+      auth = firebase.auth();
+      auth.onAuthStateChanged(function(user){
+        if(user && !user.isAnonymous) Profile.attachAccount(user);
+        else Profile.detachAccount();
+      });
+    }
     fbReady = true;
     return true;
   }catch(e){
@@ -1222,7 +1445,9 @@ function finish(winner){
       $("crest").innerHTML = crestWin();
       $("endTitle").textContent = "YOU WIN";
       $("endTitle").className = "end-title win";
-      $("endMsg").textContent = "You completed the sequence first. The board never got ahead of you.";
+      var reward = mode === "online" ? ONLINE_REWARD : DIFF[difficulty].reward;
+      var newBal = Profile.addMemos(reward);
+      $("endMsg").textContent = "You completed the sequence first. The board never got ahead of you. +" + reward + " memos (" + newBal + " total).";
       Sound.win(); petals();
     }else{
       $("crest").innerHTML = crestLose();
@@ -1258,6 +1483,7 @@ function petals(){
 /* ===================== screens ===================== */
 function show(name){
   $("s-menu").classList.toggle("hidden", name!=="menu");
+  $("s-profile").classList.toggle("hidden", name!=="profile");
   $("s-lobby").classList.toggle("hidden", name!=="lobby");
   $("s-game").classList.toggle("hidden", name!=="game");
   $("s-end").classList.toggle("hidden", name!=="end");
@@ -1306,6 +1532,167 @@ var MARKS = {
 /* ===================== boot ===================== */
 document.addEventListener("DOMContentLoaded", function(){
   boardEl = $("board"); msgEl = $("msg"); objNum = $("objNum"); objective = $("objective");
+
+  initFirebase(); // safe no-op if unconfigured; wires up auth state listener when available
+
+  /* ===== profile / memos wiring ===== */
+  Profile.load(); Profile.renderChip();
+
+  var avaUrlInput = $("avaUrlInput");
+  var pendingAvatar = null;
+  avaUrlInput.addEventListener("input", function(){
+    var v = avaUrlInput.value.trim();
+    var p = Profile.get();
+    pendingAvatar = v;
+    var valid = /^https?:\/\/\S+\.(png|jpe?g|gif|webp|svg)(\?.*)?$/i.test(v);
+    var same = v === p.avatar;
+    $("bSaveAvatar").disabled = !valid || same;
+    $("avaNote").textContent = !v ? "" : same ? "That's already your profile picture." : (!valid ? "Enter a direct image URL (png, jpg, gif, webp, svg)." : "");
+  });
+
+  function openProfile(){
+    var p = Profile.get();
+    $("profBalance").textContent = p.memos;
+    $("avaCurrentImg").src = p.avatar;
+    $("avaCurrentImg").style.display = "";
+    pendingAvatar = null;
+    avaUrlInput.value = "";
+    $("bSaveAvatar").disabled = true;
+    $("avaNote").textContent = "";
+    $("nameInput").value = "";
+    $("nameInput").placeholder = p.name;
+    $("bSaveName").disabled = true;
+    $("nameNote").textContent = "";
+    refreshAccountPanel();
+    show("profile");
+  }
+
+  function refreshAccountPanel(){
+    var signedIn = Profile.isSignedIn();
+    $("acctSignedOut").classList.toggle("hidden", signedIn);
+    $("acctSignedIn").classList.toggle("hidden", !signedIn);
+    if(signedIn) $("acctEmailDisplay").textContent = Profile.email();
+    $("acctEmail").value = "";
+    $("acctPassword").value = "";
+    $("acctNote").textContent = "";
+  }
+
+  function authBusy(b){
+    $("bSignUp").disabled = b; $("bSignIn").disabled = b;
+  }
+
+  function authErrorMessage(e){
+    switch(e.code){
+      case "auth/email-already-in-use": return "That email already has an account — try signing in instead.";
+      case "auth/invalid-email": return "Enter a valid email address.";
+      case "auth/weak-password": return "Password must be at least 6 characters.";
+      case "auth/user-not-found":
+      case "auth/wrong-password":
+      case "auth/invalid-credential": return "Email or password is incorrect.";
+      case "auth/too-many-requests": return "Too many attempts — wait a moment and try again.";
+      default: return e.message || "Something went wrong. Try again.";
+    }
+  }
+
+  $("bProfile").addEventListener("click", function(){ Sound.init(); Sound.ui(); openProfile(); });
+  $("bProfileBack").addEventListener("click", function(){ Sound.init(); show("menu"); });
+
+  $("bSignUp").addEventListener("click", function(){
+    Sound.init();
+    if(!initFirebase()){ $("acctNote").textContent = "Firebase isn't configured yet — check the config at the top of the file."; return; }
+    var email = $("acctEmail").value.trim();
+    var pass = $("acctPassword").value;
+    if(!email || !pass){ $("acctNote").textContent = "Enter an email and password."; return; }
+    authBusy(true); $("acctNote").textContent = "Creating account…";
+    auth.createUserWithEmailAndPassword(email, pass).then(function(cred){
+      return Profile.attachAccount(cred.user);
+    }).then(function(){
+      $("profBalance").textContent = Profile.get().memos;
+      $("nameInput").placeholder = Profile.get().name;
+      refreshAccountPanel();
+      $("acctNote").textContent = "";
+      toast("Account created. Your profile now syncs to this account.");
+    }).catch(function(e){
+      $("acctNote").textContent = authErrorMessage(e);
+    }).then(function(){ authBusy(false); });
+  });
+
+  $("bSignIn").addEventListener("click", function(){
+    Sound.init();
+    if(!initFirebase()){ $("acctNote").textContent = "Firebase isn't configured yet — check the config at the top of the file."; return; }
+    var email = $("acctEmail").value.trim();
+    var pass = $("acctPassword").value;
+    if(!email || !pass){ $("acctNote").textContent = "Enter an email and password."; return; }
+    authBusy(true); $("acctNote").textContent = "Signing in…";
+    auth.signInWithEmailAndPassword(email, pass).then(function(cred){
+      return Profile.attachAccount(cred.user);
+    }).then(function(){
+      $("profBalance").textContent = Profile.get().memos;
+      $("nameInput").placeholder = Profile.get().name;
+      refreshAccountPanel();
+      $("acctNote").textContent = "";
+      toast("Signed in.");
+    }).catch(function(e){
+      $("acctNote").textContent = authErrorMessage(e);
+    }).then(function(){ authBusy(false); });
+  });
+
+  $("bSignOut").addEventListener("click", function(){
+    Sound.init();
+    if(auth) auth.signOut();
+    Profile.detachAccount();
+    $("profBalance").textContent = Profile.get().memos;
+    $("nameInput").placeholder = Profile.get().name;
+    $("avaCurrentImg").src = Profile.get().avatar;
+    refreshAccountPanel();
+    toast("Signed out — you're playing anonymously again.");
+  });
+
+  $("bSaveAvatar").addEventListener("click", function(){
+    if(!pendingAvatar) return;
+    var p = Profile.get();
+    if(pendingAvatar === p.avatar){ $("avaNote").textContent = "That's already your profile picture."; return; }
+    if(p.memos < COST_AVATAR){
+      $("avaNote").textContent = "Not enough memos — you need " + COST_AVATAR + ", you have " + p.memos + ".";
+      Sound.miss();
+      return;
+    }
+    Profile.spend(COST_AVATAR);
+    Profile.setAvatar(pendingAvatar);
+    $("avaCurrentImg").src = pendingAvatar;
+    $("profBalance").textContent = Profile.get().memos;
+    $("bSaveAvatar").disabled = true;
+    $("avaNote").textContent = "Profile picture updated.";
+    Sound.ui();
+  });
+
+  $("nameInput").addEventListener("input", function(){
+    var v = $("nameInput").value;
+    $("bSaveName").disabled = v.trim().length === 0;
+    $("nameNote").textContent = "";
+  });
+  $("nameInput").addEventListener("keydown", function(e){ if(e.key === "Enter") $("bSaveName").click(); });
+
+  $("bSaveName").addEventListener("click", function(){
+    var v = $("nameInput").value.trim();
+    if(!v) return;
+    if(v.length > 16){ $("nameNote").textContent = "Usernames are 16 characters or fewer."; return; }
+    var p = Profile.get();
+    if(v === p.name){ $("nameNote").textContent = "That's already your username."; return; }
+    if(p.memos < COST_USERNAME){
+      $("nameNote").textContent = "Not enough memos — you need " + COST_USERNAME + ", you have " + p.memos + ".";
+      Sound.miss();
+      return;
+    }
+    Profile.spend(COST_USERNAME);
+    Profile.setName(v);
+    $("nameInput").value = "";
+    $("nameInput").placeholder = v;
+    $("profBalance").textContent = Profile.get().memos;
+    $("bSaveName").disabled = true;
+    $("nameNote").textContent = "Username updated.";
+    Sound.ui();
+  });
 
   var ul = $("ruleList");
   RULES.forEach(function(r){
