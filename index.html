@@ -109,6 +109,18 @@ button:focus-visible{ outline:2px solid var(--foam); outline-offset:4px; }
 .panel.you.on{ border-color:rgba(127,216,196,.4); box-shadow:0 0 34px rgba(127,216,196,.14); }
 .panel.foe.on{ border-color:rgba(154,168,224,.4); box-shadow:0 0 34px rgba(154,168,224,.14); }
 .panel.gone{ opacity:.45; }
+.lobby-roster{ display:flex; flex-wrap:wrap; gap:10px; justify-content:center; margin-top:26px; max-width:420px; }
+.roster-chip{ display:flex; align-items:center; gap:8px; padding:7px 13px 7px 7px; border-radius:999px;
+  background:rgba(255,255,255,.03); border:1px solid var(--line); }
+.roster-chip img{ width:26px; height:26px; border-radius:50%; object-fit:cover; flex:0 0 auto; }
+.roster-chip span{ font-size:.85rem; color:var(--text-soft); max-width:110px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.roster-chip.bot{ opacity:.6; border-style:dashed; }
+.roster-chip.empty{ opacity:.35; border-style:dashed; }
+.roster-strip{ display:flex; flex-wrap:wrap; gap:8px; justify-content:center; width:100%; margin-top:14px; }
+.roster-strip .roster-chip{ padding:5px 11px 5px 5px; }
+.roster-strip .roster-chip img{ width:20px; height:20px; }
+.roster-strip .roster-chip span{ font-size:.76rem; max-width:80px; }
+.roster-strip .roster-chip b{ font-weight:500; color:var(--text-dim); }
 .ring-wrap{ position:relative; flex:0 0 auto; width:54px; height:54px; }
 .ring-wrap .count{ position:absolute; inset:0; display:flex; align-items:center; justify-content:center; font-size:1.05rem; font-weight:400; }
 .ring-avatar{ position:absolute; width:20px; height:20px; border-radius:50%; object-fit:cover; bottom:-2px; right:-2px;
@@ -346,6 +358,28 @@ button:focus-visible{ outline:2px solid var(--foam); outline-offset:4px; }
     <p class="foot-note">Fifteen discs. One sequence. Whoever holds the map wins.</p>
   </div>
 
+  <!-- ===== ROOM SETTINGS ===== -->
+  <div class="screen hidden" id="s-roomsettings">
+    <div style="margin-top:10vh"></div>
+    <h2 style="font-weight:200; letter-spacing:.2em; font-size:1.3rem; margin:0">ROOM SETTINGS</h2>
+    <p class="note" style="margin-top:8px">Choose how many players share this room.</p>
+    <div class="block">
+      <span class="block-title">PLAYERS</span>
+      <div class="seg" id="playerCountSeg" role="group" aria-label="Player count">
+        <button data-count="2" class="active">2</button>
+        <button data-count="3">3</button>
+        <button data-count="4">4</button>
+        <button data-count="5">5</button>
+        <button data-count="6">6</button>
+      </div>
+      <span class="note" id="playerCountNote">Two players. Classic head-to-head.</span>
+    </div>
+    <div class="btn-row">
+      <button class="btn btn-primary" id="bCreateRoom">Create room</button>
+      <button class="btn btn-ghost" id="bRoomSettingsBack">Back</button>
+    </div>
+  </div>
+
   <!-- ===== PROFILE ===== -->
   <div class="screen hidden" id="s-profile">
     <div style="margin-top:7vh"></div>
@@ -425,7 +459,11 @@ button:focus-visible{ outline:2px solid var(--foam); outline-offset:4px; }
       <button class="copy-btn" id="bCopy">COPY</button>
     </div>
     <div class="waiting"><span class="pulse-dot"></span><span id="lobbyStatus">Waiting for an opponent…</span></div>
-    <div class="btn-row"><button class="btn btn-ghost" id="bLeaveLobby">Cancel</button></div>
+    <div class="lobby-roster" id="lobbyRoster"></div>
+    <div class="btn-row">
+      <button class="btn btn-primary hidden" id="bPlayWithBots">Play with bot</button>
+      <button class="btn btn-ghost" id="bLeaveLobby">Cancel</button>
+    </div>
   </div>
 
   <!-- ===== GAME ===== -->
@@ -466,6 +504,8 @@ button:focus-visible{ outline:2px solid var(--foam); outline-offset:4px; }
           </div>
         </div>
       </div>
+
+      <div class="roster-strip hidden" id="gameRoster"></div>
 
       <div class="objective" id="objective">
         <span class="objective-label">FIND</span>
@@ -550,6 +590,7 @@ var AVATARS = [DEFAULT_AVATAR];
 
 var Profile = (function(){
   var KEY = "farProfile";
+  var LINK_KEY = "farLinkedUid";
   var data = null;
   var counterKey = "farPlayerNum";
   var authUser = null;   // firebase.User when signed in, else null
@@ -583,15 +624,24 @@ var Profile = (function(){
   function isSignedIn(){ return !!authUser; }
   function email(){ return authUser ? authUser.email : null; }
 
-  function addMemos(n){
+  function logLedger(reason, delta, balanceAfter){
+    if(!userRef) return;
+    try{
+      userRef.child("ledger").push({ reason:reason, delta:delta, balance:balanceAfter, ts:firebase.database.ServerValue.TIMESTAMP });
+    }catch(e){ /* logging must never block gameplay */ }
+  }
+
+  function addMemos(n, reason){
     get(); data.memos = Math.max(0, data.memos + n); save(); renderChip();
+    logLedger(reason || "reward", n, data.memos);
     return data.memos;
   }
 
-  function spend(n){
+  function spend(n, reason){
     get();
     if(data.memos < n) return false;
     data.memos -= n; save(); renderChip();
+    logLedger(reason || "spend", -n, data.memos);
     return true;
   }
 
@@ -599,23 +649,37 @@ var Profile = (function(){
   function setName(n){ get(); data.name = n; save(); renderChip(); }
 
   // Called once auth state resolves. Merges local + remote so nobody loses memos
-  // by signing up after playing anonymously: remote memos + local memos combine,
-  // remote name/avatar win if set, otherwise local values carry over.
+  // by signing up after playing anonymously — but only does that additive merge
+  // ONCE per account per device. Every prior version of this function re-added
+  // local.memos + remote.memos on *every* reload where a session was already
+  // signed in — and since save() always mirrors local back to remote, local and
+  // remote were already equal, so each reload doubled the balance again. That's
+  // the "duplicates my memos on restart" bug. The LINK_KEY flag below is the fix:
+  // once a uid has been linked on this device, later reloads just adopt the
+  // remote value as-is instead of adding to it.
   function attachAccount(user){
     authUser = user;
     if(!user){ userRef = null; renderChip(); return Promise.resolve(); }
     userRef = db.ref("users/" + user.uid);
     var local = get();
+    var alreadyLinked = (function(){ try{ return localStorage.getItem(LINK_KEY) === user.uid; }catch(e){ return false; } })();
+    var mergeLogged = null;
     return userRef.once("value").then(function(snap){
       var remote = snap.val();
       var localIsCustomized = local.avatar && local.avatar !== DEFAULT_AVATAR;
       var googleAvatar = user.photoURL || null;
-      if(remote){
+      if(remote && alreadyLinked){
+        // Returning session on a device that already merged with this account.
+        // Remote is the single source of truth — do not add local on top of it.
+        data = { avatar: remote.avatar || DEFAULT_AVATAR, name: remote.name || local.name, memos: remote.memos || 0 };
+      }else if(remote){
+        // First time this device has linked to this account: genuine one-time merge.
         data = {
           avatar: remote.avatar || local.avatar || googleAvatar || DEFAULT_AVATAR,
           name:   remote.name   || local.name,
           memos:  (remote.memos || 0) + (local.memos || 0)
         };
+        mergeLogged = local.memos || 0;
       }else{
         data = {
           avatar: localIsCustomized ? local.avatar : (googleAvatar || local.avatar || DEFAULT_AVATAR),
@@ -623,10 +687,12 @@ var Profile = (function(){
           memos:  local.memos || 0
         };
       }
+      try{ localStorage.setItem(LINK_KEY, user.uid); }catch(e){}
       return userRef.set({ avatar:data.avatar, name:data.name, memos:data.memos, email:user.email || null });
     }).then(function(){
       save();
       renderChip();
+      if(mergeLogged !== null) logLedger("account_merge_local_carryover", mergeLogged, data.memos);
     }).catch(function(e){
       console.error("Account sync failed:", e);
     });
@@ -663,12 +729,33 @@ var aiMap = new Map();
 var timers = [];
 
 var db = null, auth = null, googleProvider = null, fbReady = false, started = false;
-var room = { code:null, role:null, ref:null, seenMove:0, seenResult:0, rematchMine:false };
+var room = { code:null, role:null, ref:null, seenMove:0, seenResult:0, rematchMine:false, bots:{}, botMoving:false, lastData:null };
+var pendingRoomSize = 2;
 
 function $(id){ return document.getElementById(id); }
 function later(fn, ms){ var t = setTimeout(fn, ms); timers.push(t); return t; }
 function clearTimers(){ timers.forEach(clearTimeout); timers = []; }
-function otherRole(r){ return r === "host" ? "guest" : "host"; }
+
+/* ---- slot helpers: rooms hold p1..p6, p1 is always the creator/host ---- */
+var SLOT_IDS = ["p1","p2","p3","p4","p5","p6"];
+function occupiedSlots(d){
+  var max = (d && d.maxPlayers) || 2, out = [];
+  for(var n=1;n<=max;n++){ var k="p"+n; if(d && d[k]) out.push(k); }
+  return out;
+}
+function nextSlot(d, from){
+  var occ = occupiedSlots(d);
+  if(!occ.length) return from;
+  var idx = occ.indexOf(from);
+  if(idx === -1) return occ[0];
+  return occ[(idx+1) % occ.length];
+}
+/* which slot the "foe" panel should represent: whoever currently holds the
+   turn, or — if it's my own turn — a preview of who goes next if I miss */
+function spotlightSlot(d){
+  if(d.turn && d.turn !== room.role) return d.turn;
+  return nextSlot(d, room.role);
+}
 
 var boardEl, msgEl, objNum, objective;
 
@@ -1104,16 +1191,20 @@ function foeMiss(i, isAi){
    rooms/{CODE}
      createdAt   number
      status      "waiting" | "playing" | "rematch" | "over"
+     maxPlayers  2..6
      board       [15 numbers]
-     turn        "host" | "guest"
-     winner      null | "host" | "guest"
-     open        { "<slot>": true }      locked-in discs
-     move        { slot, by, seq }       latest flip, for the animation
+     turn        "p1".."p6"                slot whose turn it currently is
+     winner      null | "p1".."p6"
+     open        { "<slot>": true }        locked-in discs
+     move        { slot, by, seq }         latest flip, for the animation
      result      { slot, by, kind, value, seq }
-     host/guest  { online, progress, target, rematch }
+     p1..p6      { online, isBot, progress, target, rematch, name, avatar }
 
-   Only the player whose turn it is writes game state, so there is never a
-   write conflict. The other client just animates what it receives.
+   p1 is always the creator and the only slot that ever runs host-side logic
+   (advancing a stalled rematch, and driving every bot's moves — bots have no
+   client of their own, so p1's browser computes and writes their turns).
+   Otherwise, only the player whose turn it is writes game state, so there is
+   never a write conflict — everyone else just animates what they receive.
    ======================================================================= */
 function initFirebase(){
   if(fbReady) return true;
@@ -1144,43 +1235,47 @@ function makeCode(){
   for(var i=0;i<4;i++) s += chars.charAt(Math.floor(Math.random()*chars.length));
   return s;
 }
-function blankSide(){
+function blankSide(isBot, botLabel){
+  if(isBot) return { online:true, isBot:true, progress:0, target:1, rematch:false, name:botLabel, avatar:DEFAULT_AVATAR };
   var p = Profile.get();
-  return { online:true, progress:0, target:1, rematch:false, name:p.name, avatar:p.avatar };
+  return { online:true, isBot:false, progress:0, target:1, rematch:false, name:p.name, avatar:p.avatar };
 }
 
-function createRoom(){
+function createRoom(maxPlayers){
   if(!initFirebase()){ netErr(); return; }
-  $("bCreate").disabled = true; $("bJoin").disabled = true;
+  maxPlayers = Math.max(2, Math.min(6, maxPlayers || 2));
+  $("bCreateRoom").disabled = true;
 
   var code = makeCode();
   db.ref("rooms/"+code).once("value").then(function(snap){
     if(snap.exists()) code = makeCode(); // one retry is plenty for 1M combos
-    room.code = code; room.role = "host";
+    room.code = code; room.role = "p1";
     room.seenMove = 0; room.seenResult = 0; room.rematchMine = false;
+    room.bots = {}; room.botMoving = false; room.lastData = null;
     room.ref = db.ref("rooms/"+code);
     started = false;
 
-    return room.ref.set({
+    var payload = {
       createdAt: firebase.database.ServerValue.TIMESTAMP,
       status: "waiting",
+      maxPlayers: maxPlayers,
       board: shuffle(TOTAL),
-      turn: "host",
+      turn: "p1",
       winner: null,
-      host: blankSide(),
-      guest: null
-    });
+      p1: blankSide(false)
+    };
+    return room.ref.set(payload);
   }).then(function(){
-    room.ref.child("host/online").onDisconnect().set(false);
+    room.ref.child("p1/online").onDisconnect().set(false);
     $("lobbyCode").textContent = room.code;
-    $("lobbyStatus").textContent = "Waiting for an opponent…";
+    renderLobby({ maxPlayers:maxPlayers, p1: blankSide(false) }, maxPlayers);
     show("lobby");
     attachRoom();
   }).catch(function(e){
     console.error(e);
     toast("Could not create the room — check your database rules.", true);
   }).then(function(){
-    $("bCreate").disabled = false; $("bJoin").disabled = false;
+    $("bCreateRoom").disabled = false;
   });
 }
 
@@ -1191,27 +1286,72 @@ function joinRoom(){
 
   $("bCreate").disabled = true; $("bJoin").disabled = true;
   var ref = db.ref("rooms/"+code);
+  var claimedSlot = null;
 
   ref.once("value").then(function(snap){
     if(!snap.exists()){ toast("No room with that code.", true); return null; }
-    var d = snap.val();
-    if(d.guest && d.guest.online){ toast("That room is already full.", true); return null; }
+    if(snap.val().status !== "waiting"){ toast("That room has already started.", true); return null; }
 
-    room.code = code; room.role = "guest";
+    return ref.transaction(function(d){
+      if(d === null) return; // room vanished between the check above and now
+      if(d.status !== "waiting") return; // started/full in the meantime
+      var max = d.maxPlayers || 2, mySlot = null;
+      for(var n=2;n<=max;n++){ var k="p"+n; if(!d[k]){ mySlot = k; break; } }
+      if(!mySlot) return; // no empty slot — full
+      claimedSlot = mySlot;
+      var p = Profile.get();
+      d[mySlot] = { online:true, isBot:false, progress:0, target:1, rematch:false, name:p.name, avatar:p.avatar };
+      var filled = 0;
+      for(var n2=1;n2<=max;n2++){ if(d["p"+n2]) filled++; }
+      if(filled >= max) d.status = "playing";
+      return d;
+    });
+  }).then(function(result){
+    if(!result) return; // already toasted above
+    if(!result.committed || !claimedSlot){
+      toast("That room is already full or has started.", true);
+      return;
+    }
+    var d = result.snapshot.val();
+    room.code = code; room.role = claimedSlot;
     room.seenMove = 0; room.seenResult = 0; room.rematchMine = false;
+    room.bots = {}; room.botMoving = false; room.lastData = null;
     room.ref = ref;
     started = false;
-
-    return ref.update({ guest: blankSide(), status: "playing" }).then(function(){
-      ref.child("guest/online").onDisconnect().set(false);
-      Sound.join();
-      attachRoom();
-    });
+    ref.child(claimedSlot+"/online").onDisconnect().set(false);
+    Sound.join();
+    attachRoom();
+    if(d.status !== "playing"){
+      $("lobbyCode").textContent = code;
+      renderLobby(d, d.maxPlayers || 2);
+      show("lobby");
+    }
   }).catch(function(e){
     console.error(e);
     toast("Could not join — check your database rules.", true);
   }).then(function(){
     $("bCreate").disabled = false; $("bJoin").disabled = false;
+  });
+}
+
+function fillWithBots(){
+  if(!room.ref || room.role !== "p1") return;
+  $("bPlayWithBots").disabled = true;
+  room.ref.transaction(function(d){
+    if(!d || d.status !== "waiting") return;
+    var max = d.maxPlayers || 2, botN = 0;
+    for(var n=2;n<=max;n++){
+      var k = "p"+n;
+      if(!d[k]){ botN++; d[k] = blankSide(true, "Bot " + botN); }
+    }
+    d.status = "playing";
+    return d;
+  }).then(function(result){
+    $("bPlayWithBots").disabled = false;
+    if(!result.committed) toast("Couldn't fill with bots — try again.", true);
+  }).catch(function(e){
+    $("bPlayWithBots").disabled = false;
+    console.error(e);
   });
 }
 
@@ -1229,36 +1369,98 @@ function detachRoom(){
       room.ref.child(room.role+"/online").set(false);
     }catch(e){}
   }
-  room = { code:null, role:null, ref:null, seenMove:0, seenResult:0, rematchMine:false };
+  room = { code:null, role:null, ref:null, seenMove:0, seenResult:0, rematchMine:false, bots:{}, botMoving:false, lastData:null };
+}
+
+/* live roster row shown in the lobby while waiting for players */
+function renderLobby(d, maxPlayers){
+  var el = $("lobbyRoster");
+  if(!el) return;
+  el.innerHTML = "";
+  var filled = 0;
+  for(var n=1;n<=maxPlayers;n++){
+    var s = d && d["p"+n];
+    var chip = document.createElement("div");
+    if(s){
+      filled++;
+      chip.className = "roster-chip" + (s.isBot ? " bot" : "");
+      chip.innerHTML = '<img src="'+(s.avatar||DEFAULT_AVATAR)+'" alt=""><span>'+(s.name||(n===1?"Host":"Player "+n))+'</span>';
+    }else{
+      chip.className = "roster-chip empty";
+      chip.innerHTML = '<span>Open slot</span>';
+    }
+    el.appendChild(chip);
+  }
+  var need = maxPlayers - filled;
+  $("lobbyStatus").textContent = need > 0
+    ? "Waiting for " + need + " player" + (need === 1 ? "" : "s") + "…"
+    : "Everyone's in — starting…";
+  var showBots = (room.role === "p1" && need > 0);
+  $("bPlayWithBots").classList.toggle("hidden", !showBots);
+  if(showBots) $("bPlayWithBots").textContent = "Play with " + need + " bot" + (need === 1 ? "" : "s");
+}
+
+/* compact strip of every other participant, shown during multiplayer games with 3+ players */
+function renderGameRoster(d){
+  var el = $("gameRoster");
+  if(!el) return;
+  var max = d.maxPlayers || 2;
+  if(max <= 2){ el.classList.add("hidden"); el.innerHTML = ""; return; }
+  el.innerHTML = "";
+  for(var n=1;n<=max;n++){
+    var k = "p"+n;
+    if(k === room.role) continue;
+    var s = d[k];
+    if(!s) continue;
+    var chip = document.createElement("div");
+    chip.className = "roster-chip" + (s.isBot ? " bot" : "") + (d.turn === k ? " on" : "");
+    chip.style.borderColor = (d.turn === k) ? "var(--line-strong)" : "";
+    chip.innerHTML = '<img src="'+(s.avatar||DEFAULT_AVATAR)+'" alt=""><span>'+(s.name||k)+'</span> <b>'+(s.progress||0)+'/'+TOTAL+'</b>';
+    el.appendChild(chip);
+  }
+  el.classList.remove("hidden");
+}
+
+function allHumansReady(d){
+  var max = d.maxPlayers || 2;
+  for(var n=1;n<=max;n++){
+    var s = d["p"+n];
+    if(!s || s.isBot) continue;
+    if(!s.rematch) return false;
+  }
+  return true;
 }
 
 function onRoom(snap){
   var d = snap.val();
   if(!d){ if(mode === "online"){ toast("The room was closed.", true); goMenu(); } return; }
+  room.lastData = d;
 
-  var me  = d[room.role] || blankSide();
-  var foe = d[otherRole(room.role)];
+  var me = d[room.role] || blankSide(false);
 
-  /* lobby → game */
+  /* lobby → game (fires once the room is full, whether by joins or by "Play with bot") */
   if(!started){
-    if(d.status === "playing" && d.guest){
+    if(d.status === "playing"){
       started = true;
       startOnlineGame(d);
     }else{
-      $("lobbyStatus").textContent = "Waiting for an opponent…";
+      renderLobby(d, d.maxPlayers || 2);
       return;
     }
   }
 
+  var foeSlot = spotlightSlot(d);
+  var foe = d[foeSlot];
+
   /* opponent presence */
-  if(foe && foe.online === false && !over){
+  if(foe && foe.online === false && !foe.isBot && !over){
     $("pFoe").classList.add("gone");
     say("Your opponent disconnected.","bad");
   }else{
     $("pFoe").classList.remove("gone");
   }
 
-  /* opponent profile — keep the HUD in sync with whatever they've set */
+  /* opponent profile — keep the HUD in sync with whoever's currently spotlighted */
   if(foe && foe.name){
     $("foeLabel").textContent = foe.name;
     $("statFoeK").textContent = foe.name;
@@ -1267,17 +1469,20 @@ function onRoom(snap){
     $("pFoeAvatar").src = foe.avatar;
     $("pFoeAvatar").classList.add("on");
   }
+  renderGameRoster(d);
 
   /* rematch handshake */
   if(d.status === "rematch"){
-    var bothReady = d.host && d.guest && d.host.rematch && d.guest.rematch;
-    if(room.role === "host" && bothReady){
-      room.ref.update({
-        status:"playing", board: shuffle(TOTAL), turn:"host", winner:null,
-        open:null, move:null, result:null,
-        host:  { online:true, progress:0, target:1, rematch:false, name:d.host.name, avatar:d.host.avatar },
-        guest: { online:true, progress:0, target:1, rematch:false, name:d.guest.name, avatar:d.guest.avatar }
-      });
+    if(room.role === "p1" && allHumansReady(d)){
+      var max = d.maxPlayers || 2, resetSlots = {};
+      for(var n=1;n<=max;n++){
+        var s = d["p"+n];
+        if(!s) continue;
+        resetSlots["p"+n] = { online:true, isBot:!!s.isBot, progress:0, target:1, rematch:false, name:s.name, avatar:s.avatar };
+      }
+      var payload = { status:"playing", board: shuffle(TOTAL), turn:"p1", winner:null, open:null, move:null, result:null };
+      Object.keys(resetSlots).forEach(function(k){ payload[k] = resetSlots[k]; });
+      room.ref.update(payload);
     }else if(foe && foe.rematch && !room.rematchMine){
       $("rematchNote").classList.remove("hidden");
       $("rematchNote").textContent = "Your opponent wants a rematch. Hit Play again.";
@@ -1305,7 +1510,7 @@ function onRoom(snap){
     if(!locked) turn = myTurn ? "you" : "foe";
     hud();
 
-    /* animate the opponent's flip */
+    /* animate whoever just flipped */
     if(d.move && d.move.seq > room.seenMove && d.move.by !== room.role){
       room.seenMove = d.move.seq;
       if(discs[d.move.slot] && !discs[d.move.slot].disc.classList.contains("up")){
@@ -1314,7 +1519,7 @@ function onRoom(snap){
       }
     }
 
-    /* apply the opponent's result */
+    /* apply whoever's result just landed */
     if(d.result && d.result.seq > room.seenResult && d.result.by !== room.role){
       room.seenResult = d.result.seq;
       var ri = d.result.slot, rv = d.result.value;
@@ -1331,9 +1536,10 @@ function onRoom(snap){
           later(function(){
             closeAll();
             later(function(){
-              turn = "you"; locked = false; hud();
-              Sound.handoff(true);
-              say("Your turn. Flip a disc.","");
+              turn = (d.turn === room.role) ? "you" : "foe"; // will be corrected by the very next snapshot regardless
+              locked = false; hud();
+              Sound.handoff(turn === "you");
+              say(turn === "you" ? "Your turn. Flip a disc." : "Your opponent takes the board.", turn === "you" ? "" : "foe");
             }, 500);
           }, 700);
         }, 60);
@@ -1346,11 +1552,68 @@ function onRoom(snap){
       var i = parseInt(k,10);
       if(discs[i] && !done.has(i)) lockIn(i);
     });
+
+    /* host drives every bot on the board — nobody else has a client to do it */
+    if(room.role === "p1") maybeBotMove(d);
   }
 
   if(d.winner && !over){
     finish(d.winner === room.role ? "you" : "foe");
   }
+}
+
+/* ===================== bots inside online rooms (host-driven) ===================== */
+function maybeBotMove(d){
+  if(over || room.botMoving) return;
+  if(d.status !== "playing") return;
+  var turnSlot = d.turn, slotData = d[turnSlot];
+  if(!slotData || !slotData.isBot) return;
+
+  room.botMoving = true;
+  var cfg = DIFF.medium;
+  var mem = room.bots[turnSlot] || (room.bots[turnSlot] = new Map());
+
+  later(function(){
+    if(over || !room.ref){ room.botMoving = false; return; }
+    var openIdx = [];
+    for(var i=0;i<TOTAL;i++){ if(!done.has(i)) openIdx.push(i); }
+    if(!openIdx.length){ room.botMoving = false; return; }
+
+    var target = slotData.target || 1;
+    var known = null;
+    mem.forEach(function(val, idx){ if(known === null && val === target && !done.has(idx)) known = idx; });
+
+    var pick;
+    if(known !== null && Math.random() < cfg.recall){
+      pick = (Math.random() < cfg.slip) ? openIdx[Math.floor(Math.random()*openIdx.length)] : known;
+    }else{
+      var unknown = openIdx.filter(function(x){ return !mem.has(x); });
+      var pool = unknown.length ? unknown : openIdx;
+      pick = pool[Math.floor(Math.random()*pool.length)];
+    }
+
+    var val = discs[pick] ? discs[pick].value : null;
+    if(val === null){ room.botMoving = false; return; }
+    mem.set(pick, val);
+
+    var seq = Date.now();
+    var up = {};
+    up["move"] = { slot:pick, by:turnSlot, seq:seq };
+    if(val === target){
+      var newProgress = (slotData.progress||0) + 1;
+      up["open/"+pick] = true;
+      up[turnSlot+"/progress"] = newProgress;
+      up[turnSlot+"/target"]   = target + 1;
+      up["result"] = { slot:pick, by:turnSlot, kind:"hit", value:val, seq:seq };
+      if(newProgress >= TOTAL){ up["winner"] = turnSlot; up["status"] = "over"; }
+    }else{
+      up[turnSlot+"/progress"] = 0;
+      up[turnSlot+"/target"]   = 1;
+      up["result"] = { slot:pick, by:turnSlot, kind:"miss", value:val, seq:seq };
+      up["turn"] = nextSlot(d, turnSlot);
+    }
+    room.ref.update(up).then(function(){ room.botMoving = false; }).catch(function(){ room.botMoving = false; });
+  }, cfg.tMin + Math.random()*(cfg.tMax-cfg.tMin));
 }
 
 function startOnlineGame(d){
@@ -1362,7 +1625,8 @@ function startOnlineGame(d){
   youBest = 0; foeBest = 0; youTarget = 1; foeTarget = 1;
   turn = (d.turn === room.role) ? "you" : "foe";
   buildBoard(d.board);
-  var startFoe = d[otherRole(room.role)];
+  var startFoeSlot = spotlightSlot(d);
+  var startFoe = d[startFoeSlot];
   $("foeLabel").textContent = (startFoe && startFoe.name) ? startFoe.name : "OPPONENT";
   $("statFoeK").textContent = (startFoe && startFoe.name) ? startFoe.name : "OPPONENT";
   if(startFoe && startFoe.avatar){
@@ -1371,6 +1635,7 @@ function startOnlineGame(d){
   }else{
     $("pFoeAvatar").classList.remove("on");
   }
+  renderGameRoster(d);
   $("roomTag").classList.remove("hidden");
   $("roomTagCode").textContent = room.code;
   hud();
@@ -1419,7 +1684,7 @@ function resolveOnline(i){
     say("That was " + val + ". Board closes — you restart at 1.","bad");
 
     youBest = 0; youTarget = 1;
-    var down = { open:null, turn:otherRole(room.role),
+    var down = { open:null, turn: nextSlot(room.lastData || {maxPlayers:2, p1:true}, room.role),
                  result:{ slot:i, by:room.role, kind:"miss", value:val, seq:seq } };
     down[room.role+"/progress"] = 0;
     down[room.role+"/target"]   = 1;
@@ -1487,14 +1752,19 @@ function finish(winner){
       $("endTitle").textContent = "YOU WIN";
       $("endTitle").className = "end-title win";
       var reward = mode === "online" ? ONLINE_REWARD : DIFF[difficulty].reward;
-      var newBal = Profile.addMemos(reward);
+      var newBal = Profile.addMemos(reward, mode === "online" ? "online_win" : "solo_win_" + difficulty);
       $("endMsg").textContent = "You completed the sequence first. The board never got ahead of you. +" + reward + " memos (" + newBal + " total).";
       Sound.win(); petals();
     }else{
+      var winnerName = null;
+      if(mode === "online" && room.lastData && room.lastData.winner){
+        var ws = room.lastData[room.lastData.winner];
+        if(ws) winnerName = ws.name;
+      }
       $("crest").innerHTML = crestLose();
-      $("endTitle").textContent = mode === "online" ? "OPPONENT WINS" : "AI WINS";
+      $("endTitle").textContent = mode === "online" ? (winnerName ? winnerName.toUpperCase() + " WINS" : "OPPONENT WINS") : "AI WINS";
       $("endTitle").className = "end-title lose";
-      $("endMsg").textContent = (mode === "online" ? "Your opponent" : "The AI") +
+      $("endMsg").textContent = (mode === "online" ? (winnerName || "Your opponent") : "The AI") +
         " held the board in memory better this time. Take another run at it.";
       Sound.lose();
     }
@@ -1524,6 +1794,7 @@ function petals(){
 /* ===================== screens ===================== */
 function show(name){
   $("s-menu").classList.toggle("hidden", name!=="menu");
+  $("s-roomsettings").classList.toggle("hidden", name!=="roomsettings");
   $("s-profile").classList.toggle("hidden", name!=="profile");
   $("s-lobby").classList.toggle("hidden", name!=="lobby");
   $("s-game").classList.toggle("hidden", name!=="game");
@@ -1779,7 +2050,7 @@ document.addEventListener("DOMContentLoaded", function(){
     }
 
     $("bSaveAvatar").disabled = true;
-    Profile.spend(COST_AVATAR);
+    Profile.spend(COST_AVATAR, "avatar_change");
     Profile.setAvatar(pendingAvatar);
     $("avaCurrentImg").src = pendingAvatar;
     $("profBalance").textContent = Profile.get().memos;
@@ -1807,7 +2078,7 @@ document.addEventListener("DOMContentLoaded", function(){
       Sound.miss();
       return;
     }
-    Profile.spend(COST_USERNAME);
+    Profile.spend(COST_USERNAME, "username_change");
     Profile.setName(v);
     $("nameInput").value = "";
     $("nameInput").placeholder = v;
@@ -1867,8 +2138,27 @@ document.addEventListener("DOMContentLoaded", function(){
   $("howModal").addEventListener("click", function(e){ if(e.target === $("howModal")) $("howModal").classList.add("hidden"); });
   document.addEventListener("keydown", function(e){ if(e.key === "Escape") $("howModal").classList.add("hidden"); });
 
-  $("bCreate").addEventListener("click", function(){ Sound.init(); mode = "online"; createRoom(); });
+  $("bCreate").addEventListener("click", function(){ Sound.init(); Sound.ui(); mode = "online"; show("roomsettings"); });
   $("bJoin").addEventListener("click", function(){ Sound.init(); mode = "online"; joinRoom(); });
+
+  var ROOM_SIZE_NOTES = {
+    2:"Two players. Classic head-to-head.",
+    3:"Three players share the board — first to fifteen wins.",
+    4:"Four players share the board — first to fifteen wins.",
+    5:"Five players share the board — first to fifteen wins.",
+    6:"Six players share the board — first to fifteen wins."
+  };
+  $("playerCountSeg").addEventListener("click", function(e){
+    var btn = e.target.closest("button[data-count]");
+    if(!btn) return;
+    Sound.init(); Sound.ui();
+    pendingRoomSize = parseInt(btn.dataset.count, 10);
+    Array.prototype.forEach.call($("playerCountSeg").querySelectorAll("button"), function(b){ b.classList.toggle("active", b === btn); });
+    $("playerCountNote").textContent = ROOM_SIZE_NOTES[pendingRoomSize] || ROOM_SIZE_NOTES[2];
+  });
+  $("bCreateRoom").addEventListener("click", function(){ Sound.init(); createRoom(pendingRoomSize); });
+  $("bRoomSettingsBack").addEventListener("click", function(){ Sound.init(); Sound.ui(); show("menu"); });
+  $("bPlayWithBots").addEventListener("click", function(){ Sound.init(); Sound.ui(); fillWithBots(); });
   $("joinCode").addEventListener("keydown", function(e){ if(e.key === "Enter") $("bJoin").click(); });
   $("joinCode").addEventListener("input", function(e){
     e.target.value = e.target.value.toUpperCase().replace(/[^A-Z0-9]/g,"");
