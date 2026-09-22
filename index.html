@@ -111,8 +111,12 @@ button:focus-visible{ outline:2px solid var(--foam); outline-offset:4px; }
 .panel.gone{ opacity:.45; }
 .ring-wrap{ position:relative; flex:0 0 auto; width:54px; height:54px; }
 .ring-wrap .count{ position:absolute; inset:0; display:flex; align-items:center; justify-content:center; font-size:1.05rem; font-weight:400; }
+.ring-avatar{ position:absolute; width:20px; height:20px; border-radius:50%; object-fit:cover; bottom:-2px; right:-2px;
+  border:2px solid var(--abyss); background:var(--slate); display:none; }
+.ring-avatar.on{ display:block; }
 .panel-meta{ display:flex; flex-direction:column; gap:3px; min-width:0; }
-.panel-name{ font-size:.74rem; letter-spacing:.2em; color:var(--text-dim); display:flex; align-items:center; gap:7px; }
+.panel-name{ font-size:.74rem; letter-spacing:.2em; color:var(--text-dim); display:flex; align-items:center; gap:7px; min-width:0; }
+.panel-name span:first-child{ overflow:hidden; text-overflow:ellipsis; white-space:nowrap; max-width:120px; }
 .panel.you .panel-name{ color:var(--foam); }
 .panel.foe .panel-name{ color:var(--lilac); }
 .dot{ width:6px; height:6px; border-radius:50%; background:currentColor; opacity:0; transition:opacity .4s ease; }
@@ -440,9 +444,9 @@ button:focus-visible{ outline:2px solid var(--foam); outline-offset:4px; }
             <circle id="ringYou" cx="27" cy="27" r="23" fill="none" stroke="#7fd8c4" stroke-width="3" stroke-linecap="round"
               transform="rotate(-90 27 27)" stroke-dasharray="144.5" stroke-dashoffset="144.5"
               style="transition:stroke-dashoffset .7s cubic-bezier(.16,.84,.28,1)"/>
-          </svg><span class="count"><span id="youN">0</span></span></div>
+          </svg><span class="count"><span id="youN">0</span></span><img class="ring-avatar" id="pYouAvatar" src="" alt=""></div>
           <div class="panel-meta">
-            <span class="panel-name">YOU <span class="dot"></span></span>
+            <span class="panel-name"><span id="youLabel">YOU</span> <span class="dot"></span></span>
             <span class="panel-state" id="youState">Seeking <em>1</em></span>
           </div>
         </div>
@@ -455,7 +459,7 @@ button:focus-visible{ outline:2px solid var(--foam); outline-offset:4px; }
             <circle id="ringFoe" cx="27" cy="27" r="23" fill="none" stroke="#9aa8e0" stroke-width="3" stroke-linecap="round"
               transform="rotate(-90 27 27)" stroke-dasharray="144.5" stroke-dashoffset="144.5"
               style="transition:stroke-dashoffset .7s cubic-bezier(.16,.84,.28,1)"/>
-          </svg><span class="count"><span id="foeN">0</span></span></div>
+          </svg><span class="count"><span id="foeN">0</span></span><img class="ring-avatar" id="pFoeAvatar" src="" alt=""></div>
           <div class="panel-meta">
             <span class="panel-name"><span id="foeLabel">AI</span> <span class="dot"></span></span>
             <span class="panel-state" id="foeState">Seeking <em>1</em></span>
@@ -639,6 +643,9 @@ var Profile = (function(){
     $("chipAvatarImg").style.display = "";
     $("chipName").textContent = data.name;
     $("chipMemos").textContent = data.memos;
+    var yAva = $("pYouAvatar"), yLbl = $("youLabel");
+    if(yAva){ yAva.src = data.avatar; yAva.classList.add("on"); }
+    if(yLbl){ yLbl.textContent = data.name; }
   }
 
   return {
@@ -1137,7 +1144,10 @@ function makeCode(){
   for(var i=0;i<4;i++) s += chars.charAt(Math.floor(Math.random()*chars.length));
   return s;
 }
-function blankSide(){ return { online:true, progress:0, target:1, rematch:false }; }
+function blankSide(){
+  var p = Profile.get();
+  return { online:true, progress:0, target:1, rematch:false, name:p.name, avatar:p.avatar };
+}
 
 function createRoom(){
   if(!initFirebase()){ netErr(); return; }
@@ -1248,6 +1258,16 @@ function onRoom(snap){
     $("pFoe").classList.remove("gone");
   }
 
+  /* opponent profile — keep the HUD in sync with whatever they've set */
+  if(foe && foe.name){
+    $("foeLabel").textContent = foe.name;
+    $("statFoeK").textContent = foe.name;
+  }
+  if(foe && foe.avatar){
+    $("pFoeAvatar").src = foe.avatar;
+    $("pFoeAvatar").classList.add("on");
+  }
+
   /* rematch handshake */
   if(d.status === "rematch"){
     var bothReady = d.host && d.guest && d.host.rematch && d.guest.rematch;
@@ -1255,8 +1275,8 @@ function onRoom(snap){
       room.ref.update({
         status:"playing", board: shuffle(TOTAL), turn:"host", winner:null,
         open:null, move:null, result:null,
-        host:  { online:true, progress:0, target:1, rematch:false },
-        guest: { online:true, progress:0, target:1, rematch:false }
+        host:  { online:true, progress:0, target:1, rematch:false, name:d.host.name, avatar:d.host.avatar },
+        guest: { online:true, progress:0, target:1, rematch:false, name:d.guest.name, avatar:d.guest.avatar }
       });
     }else if(foe && foe.rematch && !room.rematchMine){
       $("rematchNote").classList.remove("hidden");
@@ -1342,8 +1362,15 @@ function startOnlineGame(d){
   youBest = 0; foeBest = 0; youTarget = 1; foeTarget = 1;
   turn = (d.turn === room.role) ? "you" : "foe";
   buildBoard(d.board);
-  $("foeLabel").textContent = "OPPONENT";
-  $("statFoeK").textContent = "OPPONENT";
+  var startFoe = d[otherRole(room.role)];
+  $("foeLabel").textContent = (startFoe && startFoe.name) ? startFoe.name : "OPPONENT";
+  $("statFoeK").textContent = (startFoe && startFoe.name) ? startFoe.name : "OPPONENT";
+  if(startFoe && startFoe.avatar){
+    $("pFoeAvatar").src = startFoe.avatar;
+    $("pFoeAvatar").classList.add("on");
+  }else{
+    $("pFoeAvatar").classList.remove("on");
+  }
   $("roomTag").classList.remove("hidden");
   $("roomTagCode").textContent = room.code;
   hud();
@@ -1511,6 +1538,7 @@ function newSolo(){
   buildBoard();
   $("foeLabel").textContent = "AI";
   $("statFoeK").textContent = "AI";
+  $("pFoeAvatar").classList.remove("on");
   $("roomTag").classList.add("hidden");
   $("pFoe").classList.remove("gone");
   hud(); show("game");
