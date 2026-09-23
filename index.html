@@ -795,7 +795,14 @@ var Profile = (function(){
 
   function save(){
     try{ localStorage.setItem(KEY, JSON.stringify(data)); }catch(e){ /* storage unavailable — state stays in memory */ }
-    if(userRef){ userRef.update({ avatar:data.avatar, name:data.name, memos:data.memos, themes:data.themes, equippedTheme:data.equippedTheme, emote:data.emote }).catch(function(){}); }
+    if(userRef){
+      userRef.update({
+        avatar:data.avatar, name:data.name, memos:data.memos,
+        themes: (data.themes && data.themes.length) ? data.themes : ["default"],
+        equippedTheme: data.equippedTheme || "default",
+        emote: data.emote || "👋"
+      }).catch(function(){});
+    }
   }
 
   function get(){ return data || load(); }
@@ -874,24 +881,35 @@ var Profile = (function(){
       if(remote && alreadyLinked){
         // Returning session on a device that already merged with this account.
         // Remote is the single source of truth — do not add local on top of it.
-        data = { avatar: remote.avatar || DEFAULT_AVATAR, name: remote.name || local.name, memos: remote.memos || 0 };
+        data = {
+          avatar: remote.avatar || DEFAULT_AVATAR, name: remote.name || local.name, memos: remote.memos || 0,
+          themes: (remote.themes && remote.themes.length) ? remote.themes : (local.themes || ["default"]),
+          equippedTheme: remote.equippedTheme || local.equippedTheme || "default",
+          emote: remote.emote || local.emote || "👋"
+        };
       }else if(remote){
         // First time this device has linked to this account: genuine one-time merge.
         data = {
           avatar: remote.avatar || local.avatar || googleAvatar || DEFAULT_AVATAR,
           name:   remote.name   || local.name,
-          memos:  (remote.memos || 0) + (local.memos || 0)
+          memos:  (remote.memos || 0) + (local.memos || 0),
+          themes: Array.from(new Set((remote.themes || []).concat(local.themes || ["default"]))),
+          equippedTheme: remote.equippedTheme || local.equippedTheme || "default",
+          emote: remote.emote || local.emote || "👋"
         };
         mergeLogged = local.memos || 0;
       }else{
         data = {
           avatar: localIsCustomized ? local.avatar : (googleAvatar || local.avatar || DEFAULT_AVATAR),
           name:   local.name,
-          memos:  local.memos || 0
+          memos:  local.memos || 0,
+          themes: local.themes || ["default"],
+          equippedTheme: local.equippedTheme || "default",
+          emote: local.emote || "👋"
         };
       }
       try{ localStorage.setItem(LINK_KEY, user.uid); }catch(e){}
-      return userRef.set({ avatar:data.avatar, name:data.name, memos:data.memos, email:user.email || null });
+      return userRef.set({ avatar:data.avatar, name:data.name, memos:data.memos, email:user.email || null, themes:data.themes, equippedTheme:data.equippedTheme, emote:data.emote });
     }).then(function(){
       save();
       renderChip();
