@@ -1538,7 +1538,24 @@ function joinRoom(){
   }).then(function(result){
     if(!result) return; // already toasted above
     if(!result.committed || !claimedSlot){
-      toast("That room is already full or has started.", true);
+      // Firebase resolves transactions as committed:false both when the room is
+      // genuinely full AND when the security rules reject the write — so check
+      // which one actually happened before blaming "full".
+      ref.once("value").then(function(freshSnap){
+        var d = freshSnap.val();
+        if(!d){ toast("That room no longer exists.", true); return; }
+        var max = d.maxPlayers || 2, hasOpenSlot = false;
+        for(var n=2;n<=max;n++){ if(!d["p"+n]){ hasOpenSlot = true; break; } }
+        if(d.status !== "waiting"){
+          toast("That room has already started.", true);
+        }else if(!hasOpenSlot){
+          toast("That room is already full.", true);
+        }else{
+          toast("Couldn't join — your Firebase rules may be rejecting a field this room uses (e.g. totalCards). Check the console.", true);
+        }
+      }).catch(function(){
+        toast("That room is already full or has started.", true);
+      });
       return;
     }
     var d = result.snapshot.val();
