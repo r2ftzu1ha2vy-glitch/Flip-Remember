@@ -258,6 +258,61 @@ button:focus-visible{ outline:2px solid var(--foam); outline-offset:4px; }
   .ring-wrap{ width:46px; height:46px; }
   .end-stats{ gap:18px; padding:14px 20px; }
 }
+
+/* ===== collection / themes / emotes / leaderboard ===== */
+.icon-btn{ position:static; z-index:50; width:40px; height:40px; border-radius:50%; flex:0 0 auto;
+  background:rgba(255,255,255,.03); border:1px solid var(--line); display:flex; align-items:center; justify-content:center;
+  color:var(--text-dim); backdrop-filter:blur(8px); transition:color .3s,border-color .3s; }
+.icon-btn:hover{ color:var(--text-soft); border-color:var(--line-strong); }
+.top-bar-right{ display:flex; align-items:center; gap:10px; }
+
+.tab-seg{ display:flex; gap:4px; padding:5px; border-radius:999px; background:rgba(255,255,255,.03); border:1px solid var(--line); margin-top:20px; }
+.tab-seg button{ padding:10px 22px; border-radius:999px; background:transparent; color:var(--text-dim); font-size:.88rem; letter-spacing:.05em; transition:color .3s,background .3s; }
+.tab-seg button.active{ color:var(--abyss); background:linear-gradient(105deg,var(--foam),#9fe1d3); }
+
+.roll-panel{ display:flex; flex-direction:column; align-items:center; gap:10px; margin-top:24px; padding:22px; border-radius:22px; background:rgba(255,255,255,.03); border:1px solid var(--line); width:100%; max-width:360px; }
+.roll-disc{ width:74px; height:74px; }
+.roll-disc.spin .disc-body{ animation:rollspin 1.1s cubic-bezier(.3,.7,.3,1); }
+@keyframes rollspin{ 0%{transform:rotateY(0) scale(1)} 60%{transform:rotateY(900deg) scale(1.12)} 100%{transform:rotateY(1080deg) scale(1)} }
+
+.theme-grid{ display:grid; grid-template-columns:repeat(3,1fr); gap:12px; width:100%; max-width:420px; margin-top:26px; }
+@media (max-width:420px){ .theme-grid{ grid-template-columns:repeat(2,1fr); } }
+.theme-card{ position:relative; aspect-ratio:1/1.15; border-radius:16px; border:1px solid var(--line); background:rgba(255,255,255,.03);
+  display:flex; flex-direction:column; align-items:center; justify-content:center; gap:6px; padding:10px; transition:border-color .25s,transform .2s; overflow:hidden; }
+.theme-card:active{ transform:scale(.96); }
+.theme-card.locked{ opacity:.35; }
+.theme-card.equipped{ border-color:var(--foam); box-shadow:0 0 22px rgba(127,216,196,.18); }
+.theme-swatch{ width:36px; height:36px; border-radius:50%; border:1.5px solid rgba(255,255,255,.25); }
+.theme-name{ font-size:.72rem; color:var(--text-soft); text-align:center; letter-spacing:.03em; line-height:1.2; }
+.theme-rarity{ font-size:.6rem; letter-spacing:.14em; text-transform:uppercase; }
+.theme-rarity.common{ color:var(--text-dim); }
+.theme-rarity.rare{ color:var(--tide); }
+.theme-rarity.epic{ color:var(--sand); }
+.theme-rarity.starter{ color:var(--foam); }
+.theme-equip-tag{ position:absolute; top:6px; right:6px; font-size:.58rem; letter-spacing:.08em; color:var(--foam); background:rgba(127,216,196,.14); padding:2px 6px; border-radius:999px; }
+
+.emote-row{ display:flex; flex-wrap:wrap; gap:10px; justify-content:center; width:100%; max-width:380px; margin-top:26px; }
+.emote-chip{ width:52px; height:52px; border-radius:16px; background:rgba(255,255,255,.03); border:1px solid var(--line); font-size:1.5rem; display:flex; align-items:center; justify-content:center; transition:border-color .25s,transform .2s; }
+.emote-chip:active{ transform:scale(.92); }
+.emote-chip:hover{ border-color:var(--line-strong); }
+
+.emote-btn{ position:static; width:40px; height:40px; border-radius:50%; background:rgba(255,255,255,.03); border:1px solid var(--line); font-size:1.15rem; display:flex; align-items:center; justify-content:center; color:var(--text-dim); }
+.emote-popover{ position:absolute; z-index:55; bottom:56px; right:0; display:flex; flex-wrap:wrap; gap:6px; width:186px; padding:10px; border-radius:16px; background:rgba(12,28,38,.96); border:1px solid var(--line-strong); backdrop-filter:blur(10px); }
+.emote-popover button{ width:38px; height:38px; border-radius:10px; background:rgba(255,255,255,.04); font-size:1.15rem; display:flex; align-items:center; justify-content:center; }
+.emote-popover button:hover{ background:rgba(255,255,255,.09); }
+.emote-anchor{ position:relative; }
+.emote-bubble{ position:absolute; top:-14px; right:-6px; font-size:1.4rem; background:rgba(12,28,38,.9); border:1px solid var(--line-strong); border-radius:50%; width:34px; height:34px; display:flex; align-items:center; justify-content:center;
+  opacity:0; transform:translateY(6px) scale(.7); transition:opacity .25s ease, transform .25s cubic-bezier(.16,.84,.28,1); pointer-events:none; }
+.emote-bubble.show{ opacity:1; transform:translateY(0) scale(1); }
+
+.lb-list{ display:flex; flex-direction:column; gap:8px; width:100%; max-width:440px; margin-top:26px; }
+.lb-row{ display:flex; align-items:center; gap:12px; padding:10px 16px; border-radius:16px; background:rgba(255,255,255,.03); border:1px solid var(--line); }
+.lb-row.me{ border-color:rgba(127,216,196,.4); background:rgba(127,216,196,.06); }
+.lb-rank{ width:1.6ch; text-align:center; font-size:.9rem; color:var(--text-dim); flex:0 0 auto; }
+.lb-rank.top{ color:var(--sand); font-weight:500; }
+.lb-avatar{ width:32px; height:32px; border-radius:50%; object-fit:cover; flex:0 0 auto; background:var(--slate); }
+.lb-name{ flex:1; font-size:.88rem; color:var(--text-soft); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.lb-memos{ display:flex; align-items:center; gap:5px; font-size:.85rem; color:var(--sand); flex:0 0 auto; }
 </style>
 </head>
 <body>
@@ -299,15 +354,29 @@ button:focus-visible{ outline:2px solid var(--foam); outline-offset:4px; }
         <span class="profile-chip-memos"><img src="https://iili.io/noXdxMG.png" alt="" class="memos-icon"><span id="chipMemos">0</span></span>
       </span>
     </button>
-    <button class="audio-btn" id="audioBtn" aria-label="Toggle sound">
-      <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
-        <path d="M11 5 6 9H2v6h4l5 4V5z"/>
-        <path id="wave1" d="M15.5 8.5a5 5 0 0 1 0 7"/>
-        <path id="wave2" d="M18.5 5.5a9 9 0 0 1 0 13"/>
-        <line id="mute1" x1="16" y1="9" x2="22" y2="15" style="display:none"/>
-        <line id="mute2" x1="22" y1="9" x2="16" y2="15" style="display:none"/>
-      </svg>
-    </button>
+    <div class="top-bar-right">
+      <button class="icon-btn" id="bCollection" aria-label="Card themes and emotes">
+        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+          <rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/>
+          <rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/>
+        </svg>
+      </button>
+      <button class="icon-btn" id="bLeaderboard" aria-label="Leaderboard">
+        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M8 21h8M12 17v4M7 4h10v4a5 5 0 0 1-10 0V4z"/>
+          <path d="M7 6H4a1 1 0 0 0-1 1c0 2.5 1.8 4.3 4 4.7M17 6h3a1 1 0 0 1 1 1c0 2.5-1.8 4.3-4 4.7"/>
+        </svg>
+      </button>
+      <button class="audio-btn" id="audioBtn" aria-label="Toggle sound">
+        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M11 5 6 9H2v6h4l5 4V5z"/>
+          <path id="wave1" d="M15.5 8.5a5 5 0 0 1 0 7"/>
+          <path id="wave2" d="M18.5 5.5a9 9 0 0 1 0 13"/>
+          <line id="mute1" x1="16" y1="9" x2="22" y2="15" style="display:none"/>
+          <line id="mute2" x1="22" y1="9" x2="16" y2="15" style="display:none"/>
+        </svg>
+      </button>
+    </div>
   </div>
 
   <!-- ===== MENU ===== -->
@@ -337,8 +406,18 @@ button:focus-visible{ outline:2px solid var(--foam); outline-offset:4px; }
         <button data-diff="easy">Easy</button>
         <button data-diff="medium" class="active">Medium</button>
         <button data-diff="hard">Hard</button>
+        <button data-diff="insane">Insane</button>
       </div>
       <span class="note" id="diffNote">A steady opponent. It remembers about half of what it sees.</span>
+
+      <span class="block-title" style="margin-top:22px">CARDS</span>
+      <div class="seg" id="cardsSeg" role="group" aria-label="Card count">
+        <button data-cards="9">9</button>
+        <button data-cards="12">12</button>
+        <button data-cards="15" class="active">15</button>
+      </div>
+      <span class="note" id="cardsNote">Fifteen discs. The full sequence.</span>
+
       <div class="btn-row">
         <button class="btn btn-primary" id="bPlay">Start game</button>
         <button class="btn btn-ghost" id="bHow">How to play</button>
@@ -355,7 +434,7 @@ button:focus-visible{ outline:2px solid var(--foam); outline-offset:4px; }
       </div>
     </div>
 
-    <p class="foot-note">Fifteen discs. One sequence. Whoever holds the map wins.</p>
+    <p class="foot-note" id="footNote">Fifteen discs. One sequence. Whoever holds the map wins.</p>
   </div>
 
   <!-- ===== ROOM SETTINGS ===== -->
@@ -373,6 +452,15 @@ button:focus-visible{ outline:2px solid var(--foam); outline-offset:4px; }
         <button data-count="6">6</button>
       </div>
       <span class="note" id="playerCountNote">Two players. Classic head-to-head.</span>
+    </div>
+    <div class="block">
+      <span class="block-title">CARDS</span>
+      <div class="seg" id="roomCardsSeg" role="group" aria-label="Card count">
+        <button data-cards="9">9</button>
+        <button data-cards="12">12</button>
+        <button data-cards="15" class="active">15</button>
+      </div>
+      <span class="note" id="roomCardsNote">Fifteen discs. The full sequence.</span>
     </div>
     <div class="btn-row">
       <button class="btn btn-primary" id="bCreateRoom">Create room</button>
@@ -471,12 +559,13 @@ button:focus-visible{ outline:2px solid var(--foam); outline-offset:4px; }
     <div class="hud">
       <div class="hud-top">
         <p class="hud-mark">FLIP &amp; REMEMBER</p>
-        <p class="hud-sub">Find the numbers in order. First to 15 wins.</p>
+        <p class="hud-sub" id="hudSub">Find the numbers in order. First to 15 wins.</p>
         <p class="room-tag hidden" id="roomTag">ROOM <b id="roomTagCode">----</b></p>
       </div>
 
       <div class="status-row">
-        <div class="panel you" id="pYou">
+        <div class="panel you emote-anchor" id="pYou">
+          <div class="emote-bubble" id="bubbleYou"></div>
           <div class="ring-wrap"><svg viewBox="0 0 54 54">
             <circle cx="27" cy="27" r="23" fill="none" stroke="rgba(255,255,255,.07)" stroke-width="3"/>
             <circle id="ringYou" cx="27" cy="27" r="23" fill="none" stroke="#7fd8c4" stroke-width="3" stroke-linecap="round"
@@ -491,7 +580,8 @@ button:focus-visible{ outline:2px solid var(--foam); outline-offset:4px; }
 
         <span class="vs">VS</span>
 
-        <div class="panel foe" id="pFoe">
+        <div class="panel foe emote-anchor" id="pFoe">
+          <div class="emote-bubble" id="bubbleFoe"></div>
           <div class="ring-wrap"><svg viewBox="0 0 54 54">
             <circle cx="27" cy="27" r="23" fill="none" stroke="rgba(255,255,255,.07)" stroke-width="3"/>
             <circle id="ringFoe" cx="27" cy="27" r="23" fill="none" stroke="#9aa8e0" stroke-width="3" stroke-linecap="round"
@@ -515,7 +605,13 @@ button:focus-visible{ outline:2px solid var(--foam); outline-offset:4px; }
 
     <div class="board-wrap"><div class="board" id="board"></div></div>
     <p class="message" id="msg">Your turn. Flip a disc.</p>
-    <div class="game-foot"><button class="btn-quiet" id="bQuit">LEAVE GAME</button></div>
+    <div class="game-foot">
+      <button class="btn-quiet" id="bQuit">LEAVE GAME</button>
+      <div style="position:relative" class="hidden" id="emoteWrap">
+        <button class="emote-btn" id="bEmote" aria-label="Send emote">🙂</button>
+        <div class="emote-popover hidden" id="emotePopover"></div>
+      </div>
+    </div>
   </div>
 
   <!-- ===== END ===== -->
@@ -534,6 +630,46 @@ button:focus-visible{ outline:2px solid var(--foam); outline-offset:4px; }
         <button class="btn btn-ghost" id="bMenu">Main menu</button>
       </div>
       <p class="note hidden" id="rematchNote" style="margin-top:18px"></p>
+    </div>
+  </div>
+
+  <!-- ===== COLLECTION (themes + emotes) ===== -->
+  <div class="screen hidden" id="s-collection">
+    <div style="margin-top:7vh"></div>
+    <h2 style="font-weight:200; letter-spacing:.2em; font-size:1.3rem; margin:0">COLLECTION</h2>
+    <p class="note" style="margin-top:8px">Roll for card themes and pick your emotes.</p>
+    <div class="tab-seg" id="collTabSeg" role="group" aria-label="Collection tab">
+      <button data-tab="themes" class="active">Themes</button>
+      <button data-tab="emotes">Emotes</button>
+    </div>
+
+    <div id="collThemes">
+      <div class="roll-panel">
+        <div class="roll-disc" id="rollDisc"></div>
+        <span class="note" id="rollNote" style="margin:0">Roll a new card theme for 50 memos.</span>
+        <button class="btn btn-primary btn-small" id="bRollTheme">Roll — 50 memos</button>
+      </div>
+      <div class="theme-grid" id="themeGrid"></div>
+    </div>
+
+    <div id="collEmotes" class="hidden">
+      <span class="note" style="margin-top:24px">Tap an emote to choose your default reaction, or use the emote button during an online game.</span>
+      <div class="emote-row" id="emoteGrid"></div>
+    </div>
+
+    <div class="btn-row" style="margin-top:36px; margin-bottom:20px">
+      <button class="btn btn-ghost" id="bCollectionBack">Back</button>
+    </div>
+  </div>
+
+  <!-- ===== LEADERBOARD ===== -->
+  <div class="screen hidden" id="s-leaderboard">
+    <div style="margin-top:7vh"></div>
+    <h2 style="font-weight:200; letter-spacing:.2em; font-size:1.3rem; margin:0">LEADERBOARD</h2>
+    <p class="note" style="margin-top:8px" id="lbSub">Ranked by memos earned. Signed-in players only.</p>
+    <div class="lb-list" id="lbList"></div>
+    <div class="btn-row" style="margin-top:36px; margin-bottom:20px">
+      <button class="btn btn-ghost" id="bLeaderboardBack">Back</button>
     </div>
   </div>
 </div>
@@ -576,10 +712,49 @@ var RING = 2 * Math.PI * 23;
 var DIFF = {
   easy:   { recall:.22, slip:.30, tMin:220, tMax:420, reward:10, note:"A forgetful opponent. It mostly guesses and rarely holds a map." },
   medium: { recall:.58, slip:.15, tMin:200, tMax:380, reward:25, note:"A steady opponent. It remembers about half of what it sees." },
-  hard:   { recall:.90, slip:.07, tMin:180, tMax:340, reward:40, note:"A sharp opponent. It remembers nearly every disc it has turned." }
+  hard:   { recall:.90, slip:.07, tMin:180, tMax:340, reward:40, note:"A sharp opponent. It remembers nearly every disc it has turned." },
+  insane: { recall:.97, slip:.03, tMin:130, tMax:240, reward:65, note:"A relentless opponent. It forgets almost nothing and moves fast — expect a bigger payout if you can beat it." }
 };
 var ONLINE_REWARD = 50;
 var COST_AVATAR = 50, COST_USERNAME = 100;
+var COST_THEME_ROLL = 50, DUPLICATE_THEME_REFUND = 15;
+
+var CARD_COUNTS = [9,12,15];
+var CARD_COUNT_NOTES = {
+  9:  "Nine discs. A short, sharp sequence.",
+  12: "Twelve discs. A middle ground.",
+  15: "Fifteen discs. The full sequence."
+};
+var cardCount = 15;        // solo selection
+var pendingCardCount = 15; // room settings selection
+
+/* ===================== card themes (cosmetic, gacha) ===================== */
+var THEMES = [
+  { id:"default", name:"Tidefoam",     rarity:"starter", accent:"#7fd8c4", up:"#23525f", up2:"#153a48", num:"#e6f1f3" },
+  { id:"kelp",     name:"Kelp",        rarity:"common",  accent:"#5fd88a", up:"#1e4a2e", up2:"#0f2e1c", num:"#d6f5df", weight:34 },
+  { id:"dune",     name:"Dune",        rarity:"common",  accent:"#e6c36a", up:"#5a4a28", up2:"#3a2f18", num:"#f5ecd6", weight:34 },
+  { id:"slate",    name:"Slate",       rarity:"common",  accent:"#8fa0e0", up:"#2a3450", up2:"#181e32", num:"#dfe4f5", weight:28 },
+  { id:"coral",    name:"Coral Reef",  rarity:"rare",    accent:"#e88aa0", up:"#5a2634", up2:"#3a1620", num:"#f7d9e0", weight:16 },
+  { id:"violet",   name:"Violet Deep", rarity:"rare",    accent:"#b18af0", up:"#3a2660", up2:"#221740", num:"#e9dbfa", weight:14 },
+  { id:"gold",     name:"Starlight Gold", rarity:"epic", accent:"#ffd868", up:"#5c4415", up2:"#3a2a0c", num:"#fff2cf", weight:6 },
+  { id:"prism",    name:"Void Prism",  rarity:"epic",    accent:"#c98bff", up:"#241a3d", up2:"#120c22", num:"#f0e6ff", weight:4 }
+];
+var THEME_BY_ID = {};
+THEMES.forEach(function(t){ THEME_BY_ID[t.id] = t; });
+var ROLLABLE_THEMES = THEMES.filter(function(t){ return t.rarity !== "starter"; });
+
+function rollThemeId(){
+  var totalWeight = ROLLABLE_THEMES.reduce(function(s,t){ return s + t.weight; }, 0);
+  var r = Math.random() * totalWeight;
+  for(var i=0;i<ROLLABLE_THEMES.length;i++){
+    r -= ROLLABLE_THEMES[i].weight;
+    if(r <= 0) return ROLLABLE_THEMES[i].id;
+  }
+  return ROLLABLE_THEMES[ROLLABLE_THEMES.length-1].id;
+}
+
+/* ===================== emotes ===================== */
+var EMOTES = ["👋","🎉","😂","😮","🤔","😢","🔥","🤝","👏","😤"];
 
 /* ===================== profile / memos ===================== */
 /* Anonymous play: profile lives in localStorage only, name defaults to "Player[N]".
@@ -604,19 +779,23 @@ var Profile = (function(){
     }catch(e){ return Math.floor(Math.random()*9000)+1000; }
   }
 
-  function def(){ return { avatar:DEFAULT_AVATAR, name:"Player" + nextPlayerNumber(), memos:0 }; }
+  function def(){ return { avatar:DEFAULT_AVATAR, name:"Player" + nextPlayerNumber(), memos:0, themes:["default"], equippedTheme:"default", emote:"👋" }; }
 
   function load(){
     try{
       var raw = localStorage.getItem(KEY);
       data = raw ? Object.assign(def(), JSON.parse(raw)) : def();
+      if(!data.themes || !data.themes.length) data.themes = ["default"];
+      if(data.themes.indexOf("default") === -1) data.themes.unshift("default");
+      if(!data.equippedTheme) data.equippedTheme = "default";
+      if(!data.emote) data.emote = "👋";
     }catch(e){ data = def(); }
     return data;
   }
 
   function save(){
     try{ localStorage.setItem(KEY, JSON.stringify(data)); }catch(e){ /* storage unavailable — state stays in memory */ }
-    if(userRef){ userRef.update({ avatar:data.avatar, name:data.name, memos:data.memos }).catch(function(){}); }
+    if(userRef){ userRef.update({ avatar:data.avatar, name:data.name, memos:data.memos, themes:data.themes, equippedTheme:data.equippedTheme, emote:data.emote }).catch(function(){}); }
   }
 
   function get(){ return data || load(); }
@@ -647,6 +826,30 @@ var Profile = (function(){
 
   function setAvatar(a){ get(); data.avatar = a; save(); renderChip(); }
   function setName(n){ get(); data.name = n; save(); renderChip(); }
+
+  function ownsTheme(id){ get(); return data.themes.indexOf(id) !== -1; }
+  function equippedTheme(){ get(); return data.equippedTheme || "default"; }
+  function equipTheme(id){
+    get();
+    if(data.themes.indexOf(id) === -1) return false;
+    data.equippedTheme = id; save();
+    return true;
+  }
+  function rollTheme(){
+    get();
+    if(data.memos < COST_THEME_ROLL) return { ok:false, reason:"funds" };
+    data.memos -= COST_THEME_ROLL;
+    var id = rollThemeId();
+    var isNew = data.themes.indexOf(id) === -1;
+    var refund = 0;
+    if(isNew){ data.themes.push(id); }
+    else{ refund = DUPLICATE_THEME_REFUND; data.memos += refund; }
+    save(); renderChip();
+    logLedger(isNew ? "theme_roll_new_" + id : "theme_roll_dupe_" + id, -COST_THEME_ROLL + refund, data.memos);
+    return { ok:true, id:id, isNew:isNew, refund:refund };
+  }
+  function emote(){ get(); return data.emote || "👋"; }
+  function setEmote(e){ get(); data.emote = e; save(); }
 
   // Called once auth state resolves. Merges local + remote so nobody loses memos
   // by signing up after playing anonymously — but only does that additive merge
@@ -716,7 +919,9 @@ var Profile = (function(){
 
   return {
     get:get, load:load, addMemos:addMemos, spend:spend, setAvatar:setAvatar, setName:setName,
-    renderChip:renderChip, isSignedIn:isSignedIn, email:email, attachAccount:attachAccount, detachAccount:detachAccount
+    renderChip:renderChip, isSignedIn:isSignedIn, email:email, attachAccount:attachAccount, detachAccount:detachAccount,
+    ownsTheme:ownsTheme, equippedTheme:equippedTheme, equipTheme:equipTheme, rollTheme:rollTheme,
+    emote:emote, setEmote:setEmote
   };
 })();
 
@@ -731,6 +936,7 @@ var timers = [];
 var db = null, auth = null, googleProvider = null, fbReady = false, started = false;
 var room = { code:null, role:null, ref:null, seenMove:0, seenResult:0, rematchMine:false, bots:{}, botMoving:false, lastData:null };
 var pendingRoomSize = 2;
+var onEmoteReceived = function(d){}; // wired up in DOMContentLoaded, called from onRoom
 
 function $(id){ return document.getElementById(id); }
 function later(fn, ms){ var t = setTimeout(fn, ms); timers.push(t); return t; }
@@ -983,6 +1189,27 @@ var PAINT = {
   miss: { f:"url(#dFaceMiss)", n:"#eaa6a6", h:.4,  hc:"#e08a8a", ic:"#e08a8a", io:".4" },
   foe:  { f:"url(#dFaceFoe)",  n:"#c5cbf0", h:0,   hc:"#9aa8e0", ic:"#9aa8e0", io:".3" }
 };
+
+/* Card themes only recolor the discs YOU are actively holding (the "up" and
+   "done" states) — miss/foe stay fixed so game feedback never gets ambiguous. */
+var themeGradCounter = 0;
+function applyEquippedTheme(){
+  var theme = THEME_BY_ID[Profile.equippedTheme()] || THEME_BY_ID.default;
+  var svgDefs = document.querySelector("svg[width='0'] defs");
+  if(svgDefs){
+    themeGradCounter++;
+    var gid = "dFaceUpTheme" + themeGradCounter;
+    var grad = document.createElementNS("http://www.w3.org/2000/svg","radialGradient");
+    grad.setAttribute("id", gid);
+    grad.setAttribute("cx","34%"); grad.setAttribute("cy","28%"); grad.setAttribute("r","78%");
+    grad.innerHTML = '<stop offset="0%" stop-color="'+theme.up+'"/><stop offset="60%" stop-color="'+theme.up2+'"/><stop offset="100%" stop-color="#0c2530"/>';
+    svgDefs.appendChild(grad);
+    PAINT.up.f = "url(#"+gid+")";
+    PAINT.done.f = "url(#"+gid+")";
+  }
+  PAINT.up.n = theme.num; PAINT.up.hc = theme.accent; PAINT.up.ic = theme.accent;
+  PAINT.done.n = theme.num; PAINT.done.hc = theme.accent; PAINT.done.ic = theme.accent;
+}
 function paint(i, style){
   if(!discs[i]) return;
   var m = PAINT[style] || PAINT.up, b = discs[i].back;
@@ -1255,11 +1482,13 @@ function createRoom(maxPlayers){
     room.ref = db.ref("rooms/"+code);
     started = false;
 
+    var totalCards = CARD_COUNTS.indexOf(pendingCardCount) !== -1 ? pendingCardCount : 15;
     var payload = {
       createdAt: firebase.database.ServerValue.TIMESTAMP,
       status: "waiting",
       maxPlayers: maxPlayers,
-      board: shuffle(TOTAL),
+      totalCards: totalCards,
+      board: shuffle(totalCards),
       turn: "p1",
       winner: null,
       p1: blankSide(false)
@@ -1557,6 +1786,8 @@ function onRoom(snap){
     if(room.role === "p1") maybeBotMove(d);
   }
 
+  onEmoteReceived(d);
+
   if(d.winner && !over){
     finish(d.winner === room.role ? "you" : "foe");
   }
@@ -1618,13 +1849,18 @@ function maybeBotMove(d){
 
 function startOnlineGame(d){
   clearTimers();
+  TOTAL = d.totalCards || 15;
   over = false; locked = false; flipCount = 0;
   room.seenMove   = d.move ? d.move.seq : 0;
   room.seenResult = d.result ? d.result.seq : 0;
   room.rematchMine = false;
   youBest = 0; foeBest = 0; youTarget = 1; foeTarget = 1;
   turn = (d.turn === room.role) ? "you" : "foe";
+  applyEquippedTheme();
   buildBoard(d.board);
+  updateCountTexts();
+  $("emoteWrap").classList.remove("hidden");
+  resetEmoteBubbles();
   var startFoeSlot = spotlightSlot(d);
   var startFoe = d[startFoeSlot];
   $("foeLabel").textContent = (startFoe && startFoe.name) ? startFoe.name : "OPPONENT";
@@ -1742,8 +1978,8 @@ function finish(winner){
   clearTimers(); hud();
   later(function(){
     show("end");
-    $("statYou").textContent = youBest + " / 15";
-    $("statFoe").textContent = foeBest + " / 15";
+    $("statYou").textContent = youBest + " / " + TOTAL;
+    $("statFoe").textContent = foeBest + " / " + TOTAL;
     $("statFlips").textContent = flipCount;
     $("rematchNote").classList.add("hidden");
 
@@ -1799,19 +2035,33 @@ function show(name){
   $("s-lobby").classList.toggle("hidden", name!=="lobby");
   $("s-game").classList.toggle("hidden", name!=="game");
   $("s-end").classList.toggle("hidden", name!=="end");
+  $("s-collection").classList.toggle("hidden", name!=="collection");
+  $("s-leaderboard").classList.toggle("hidden", name!=="leaderboard");
+}
+
+function updateCountTexts(){
+  $("hudSub").textContent = "Find the numbers in order. First to " + TOTAL + " wins.";
+  $("footNote").textContent = numberWord(TOTAL) + " discs. One sequence. Whoever holds the map wins.";
+}
+function numberWord(n){
+  return n===9 ? "Nine" : n===12 ? "Twelve" : "Fifteen";
 }
 
 function newSolo(){
   clearTimers();
   mode = "solo"; started = false;
+  TOTAL = cardCount;
   over = false; locked = false; flipCount = 0;
   youBest = 0; foeBest = 0; youTarget = 1; foeTarget = 1; turn = "you";
+  applyEquippedTheme();
   buildBoard();
   $("foeLabel").textContent = "AI";
   $("statFoeK").textContent = "AI";
   $("pFoeAvatar").classList.remove("on");
   $("roomTag").classList.add("hidden");
   $("pFoe").classList.remove("gone");
+  updateCountTexts();
+  $("emoteWrap").classList.add("hidden");
   hud(); show("game");
   say("Your turn. Flip a disc.","");
 }
@@ -1825,14 +2075,16 @@ function goMenu(){
 }
 
 /* ===================== rules modal ===================== */
-var RULES = [
-  ["flip","Flip a disc to reveal the number beneath it."],
-  ["order","Find the numbers <b>in order</b>, 1 through 15."],
-  ["chain","Each correct disc stays open and your turn continues."],
-  ["reset","A wrong disc closes the board and sends you back to <b>1</b>."],
-  ["turns","Miss, and the turn passes to your opponent. They remember what they've seen."],
-  ["win","First to reach <b>15</b> wins."]
-];
+function RULES(n){
+  return [
+    ["flip","Flip a disc to reveal the number beneath it."],
+    ["order","Find the numbers <b>in order</b>, 1 through "+n+"."],
+    ["chain","Each correct disc stays open and your turn continues."],
+    ["reset","A wrong disc closes the board and sends you back to <b>1</b>."],
+    ["turns","Miss, and the turn passes to your opponent. They remember what they've seen."],
+    ["win","First to reach <b>"+n+"</b> wins."]
+  ];
+}
 var MARKS = {
   flip:'<circle cx="11" cy="11" r="9" stroke="#7fd8c4" stroke-opacity=".6" fill="none"/><path d="M11 6v10M7.5 9.5 11 6l3.5 3.5" stroke="#7fd8c4" stroke-opacity=".85" stroke-linecap="round" stroke-linejoin="round" fill="none"/>',
   order:'<path d="M4 6h14M4 11h9M4 16h5" stroke="#7fd8c4" stroke-opacity=".7" stroke-linecap="round"/>',
@@ -2088,14 +2340,18 @@ document.addEventListener("DOMContentLoaded", function(){
     Sound.ui();
   });
 
-  var ul = $("ruleList");
-  RULES.forEach(function(r){
-    var li = document.createElement("li");
-    li.className = "rule";
-    li.innerHTML = '<svg class="rule-mark" width="22" height="22" viewBox="0 0 22 22" fill="none" stroke-width="1.5">'+MARKS[r[0]]+'</svg>'+
-                   '<span class="rule-text">'+r[1]+'</span>';
-    ul.appendChild(li);
-  });
+  function renderRules(n){
+    var ul = $("ruleList");
+    ul.innerHTML = "";
+    RULES(n).forEach(function(r){
+      var li = document.createElement("li");
+      li.className = "rule";
+      li.innerHTML = '<svg class="rule-mark" width="22" height="22" viewBox="0 0 22 22" fill="none" stroke-width="1.5">'+MARKS[r[0]]+'</svg>'+
+                     '<span class="rule-text">'+r[1]+'</span>';
+      ul.appendChild(li);
+    });
+  }
+  renderRules(15);
 
   $("audioBtn").addEventListener("click", function(){
     Sound.setOn(!Sound.isOn());
@@ -2132,8 +2388,28 @@ document.addEventListener("DOMContentLoaded", function(){
     setTimeout(function(){ n.textContent = DIFF[difficulty].note; n.style.opacity = 1; }, 160);
   });
 
+  $("cardsSeg").addEventListener("click", function(e){
+    var b = e.target.closest("button"); if(!b) return;
+    Array.prototype.forEach.call($("cardsSeg").children, function(x){ x.classList.remove("active"); });
+    b.classList.add("active");
+    cardCount = parseInt(b.dataset.cards, 10);
+    Sound.init(); Sound.ui();
+    var n = $("cardsNote");
+    n.style.opacity = 0;
+    setTimeout(function(){ n.textContent = CARD_COUNT_NOTES[cardCount]; n.style.opacity = 1; }, 160);
+  });
+
+  $("roomCardsSeg").addEventListener("click", function(e){
+    var b = e.target.closest("button"); if(!b) return;
+    Array.prototype.forEach.call($("roomCardsSeg").children, function(x){ x.classList.remove("active"); });
+    b.classList.add("active");
+    pendingCardCount = parseInt(b.dataset.cards, 10);
+    Sound.init(); Sound.ui();
+    $("roomCardsNote").textContent = CARD_COUNT_NOTES[pendingCardCount];
+  });
+
   $("bPlay").addEventListener("click", function(){ Sound.init(); newSolo(); });
-  $("bHow").addEventListener("click", function(){ Sound.init(); Sound.ui(); $("howModal").classList.remove("hidden"); });
+  $("bHow").addEventListener("click", function(){ Sound.init(); Sound.ui(); renderRules(mode==="online" ? pendingCardCount : cardCount); $("howModal").classList.remove("hidden"); });
   $("bCloseHow").addEventListener("click", function(){ $("howModal").classList.add("hidden"); });
   $("howModal").addEventListener("click", function(e){ if(e.target === $("howModal")) $("howModal").classList.add("hidden"); });
   document.addEventListener("keydown", function(e){ if(e.key === "Escape") $("howModal").classList.add("hidden"); });
@@ -2143,10 +2419,10 @@ document.addEventListener("DOMContentLoaded", function(){
 
   var ROOM_SIZE_NOTES = {
     2:"Two players. Classic head-to-head.",
-    3:"Three players share the board — first to fifteen wins.",
-    4:"Four players share the board — first to fifteen wins.",
-    5:"Five players share the board — first to fifteen wins.",
-    6:"Six players share the board — first to fifteen wins."
+    3:"Three players share the board — first to complete the sequence wins.",
+    4:"Four players share the board — first to complete the sequence wins.",
+    5:"Five players share the board — first to complete the sequence wins.",
+    6:"Six players share the board — first to complete the sequence wins."
   };
   $("playerCountSeg").addEventListener("click", function(e){
     var btn = e.target.closest("button[data-count]");
@@ -2196,6 +2472,216 @@ document.addEventListener("DOMContentLoaded", function(){
     if(room.ref) room.ref.child(room.role+"/online").set(false);
   });
 
+  /* ===== collection: card themes (gacha roll + inventory) ===== */
+  var RARITY_LABEL = { starter:"Starter", common:"Common", rare:"Rare", epic:"Epic" };
+
+  function themeDiscSVG(theme){
+    return '<svg viewBox="0 0 100 100"><g class="disc-body">'+
+      '<circle cx="50" cy="50" r="46" fill="'+theme.up+'" stroke="'+theme.accent+'" stroke-opacity=".6" stroke-width="1.4"/>'+
+      '<circle cx="50" cy="50" r="32" fill="none" stroke="'+theme.accent+'" stroke-opacity=".35" stroke-width="1"/>'+
+      '<circle cx="50" cy="50" r="6" fill="'+theme.accent+'" fill-opacity=".7"/></g></svg>';
+  }
+
+  function renderThemeGrid(){
+    var grid = $("themeGrid");
+    grid.innerHTML = "";
+    var equipped = Profile.equippedTheme();
+    THEMES.forEach(function(t){
+      var owned = Profile.ownsTheme(t.id);
+      var card = document.createElement("button");
+      card.className = "theme-card" + (owned ? "" : " locked") + (owned && t.id === equipped ? " equipped" : "");
+      card.innerHTML =
+        (owned && t.id === equipped ? '<span class="theme-equip-tag">EQUIPPED</span>' : "") +
+        '<div class="theme-swatch" style="background:'+t.up+'; box-shadow: inset 0 0 0 2px '+t.accent+'55"></div>'+
+        '<span class="theme-name">'+t.name+'</span>'+
+        '<span class="theme-rarity '+t.rarity+'">'+(owned ? RARITY_LABEL[t.rarity] : "Locked")+'</span>';
+      card.addEventListener("click", function(){
+        Sound.init();
+        if(!owned){ Sound.miss(); toast("You haven't rolled this theme yet."); return; }
+        Sound.ui();
+        Profile.equipTheme(t.id);
+        applyEquippedTheme();
+        renderThemeGrid();
+        toast(t.name + " equipped.");
+      });
+      grid.appendChild(card);
+    });
+  }
+
+  $("bRollTheme").addEventListener("click", function(){
+    Sound.init();
+    var p = Profile.get();
+    if(p.memos < COST_THEME_ROLL){
+      $("rollNote").textContent = "Not enough memos — you need " + COST_THEME_ROLL + ", you have " + p.memos + ".";
+      Sound.miss();
+      return;
+    }
+    $("bRollTheme").disabled = true;
+    var disc = $("rollDisc");
+    disc.innerHTML = themeDiscSVG(THEME_BY_ID.default);
+    disc.classList.remove("spin"); void disc.offsetWidth; disc.classList.add("spin");
+    Sound.ui();
+    setTimeout(function(){
+      var result = Profile.rollTheme();
+      $("bRollTheme").disabled = false;
+      if(!result.ok){ $("rollNote").textContent = "Not enough memos."; Sound.miss(); return; }
+      var theme = THEME_BY_ID[result.id];
+      disc.innerHTML = themeDiscSVG(theme);
+      $("profBalance") && ($("profBalance").textContent = Profile.get().memos);
+      if(result.isNew){
+        Sound.hit(6);
+        $("rollNote").textContent = "New theme: " + theme.name + " (" + RARITY_LABEL[theme.rarity] + ")!";
+        toast("Rolled " + theme.name + " — new theme added to your collection.");
+      }else{
+        Sound.ui();
+        $("rollNote").textContent = "Already owned: " + theme.name + ". Refunded " + result.refund + " memos.";
+        toast("Duplicate " + theme.name + " — refunded " + result.refund + " memos.");
+      }
+      renderThemeGrid();
+    }, 950);
+  });
+
+  /* ===== collection: emotes ===== */
+  function renderEmoteGrid(){
+    var grid = $("emoteGrid");
+    grid.innerHTML = "";
+    var chosen = Profile.emote();
+    EMOTES.forEach(function(e){
+      var chip = document.createElement("button");
+      chip.className = "emote-chip";
+      chip.style.borderColor = e === chosen ? "var(--foam)" : "";
+      chip.textContent = e;
+      chip.addEventListener("click", function(){
+        Sound.init(); Sound.ui();
+        Profile.setEmote(e);
+        renderEmoteGrid();
+      });
+      grid.appendChild(chip);
+    });
+  }
+
+  $("collTabSeg").addEventListener("click", function(e){
+    var b = e.target.closest("button"); if(!b) return;
+    Array.prototype.forEach.call($("collTabSeg").children, function(x){ x.classList.remove("active"); });
+    b.classList.add("active");
+    Sound.init(); Sound.ui();
+    var isThemes = b.dataset.tab === "themes";
+    $("collThemes").classList.toggle("hidden", !isThemes);
+    $("collEmotes").classList.toggle("hidden", isThemes);
+  });
+
+  $("bCollection").addEventListener("click", function(){
+    Sound.init(); Sound.ui();
+    renderThemeGrid(); renderEmoteGrid();
+    $("rollDisc").innerHTML = themeDiscSVG(THEME_BY_ID[Profile.equippedTheme()] || THEME_BY_ID.default);
+    show("collection");
+  });
+  $("bCollectionBack").addEventListener("click", function(){ Sound.init(); show("menu"); });
+
+  /* ===== in-game emote picker (online only) ===== */
+  function buildEmotePopover(){
+    var pop = $("emotePopover");
+    pop.innerHTML = "";
+    EMOTES.forEach(function(e){
+      var b = document.createElement("button");
+      b.textContent = e;
+      b.addEventListener("click", function(){
+        Sound.init(); Sound.ui();
+        pop.classList.add("hidden");
+        sendEmote(e);
+      });
+      pop.appendChild(b);
+    });
+  }
+  buildEmotePopover();
+
+  function sendEmote(e){
+    showEmoteBubble("bubbleYou", e);
+    if(mode === "online" && room.ref){
+      room.ref.child("emote").set({ by:room.role, emoji:e, seq:Date.now() }).catch(function(){});
+    }
+  }
+  var emoteBubbleTimers = { bubbleYou:null, bubbleFoe:null };
+  function showEmoteBubble(id, e){
+    var el = $(id);
+    if(!el) return;
+    el.textContent = e;
+    el.classList.add("show");
+    if(emoteBubbleTimers[id]) clearTimeout(emoteBubbleTimers[id]);
+    emoteBubbleTimers[id] = setTimeout(function(){ el.classList.remove("show"); }, 2200);
+  }
+  function resetEmoteBubbles(){
+    ["bubbleYou","bubbleFoe"].forEach(function(id){
+      var el = $(id); if(el) el.classList.remove("show");
+    });
+  }
+  var lastSeenEmote = 0;
+  function handleIncomingEmote(d){
+    if(!d.emote || d.emote.by === room.role) return;
+    if(d.emote.seq <= lastSeenEmote) return;
+    lastSeenEmote = d.emote.seq;
+    showEmoteBubble("bubbleFoe", d.emote.emoji);
+  }
+  onEmoteReceived = handleIncomingEmote;
+
+  $("bEmote").addEventListener("click", function(e){
+    e.stopPropagation();
+    Sound.init(); Sound.ui();
+    $("emotePopover").classList.toggle("hidden");
+  });
+  document.addEventListener("click", function(e){
+    var pop = $("emotePopover");
+    if(!pop || pop.classList.contains("hidden")) return;
+    if(e.target === $("bEmote") || pop.contains(e.target)) return;
+    pop.classList.add("hidden");
+  });
+
+  /* ===== leaderboard ===== */
+  function renderLeaderboardRows(rows){
+    var list = $("lbList");
+    list.innerHTML = "";
+    if(!rows.length){
+      list.innerHTML = '<p class="note">Nobody has synced a signed-in profile yet — be the first on the board.</p>';
+      return;
+    }
+    var myUid = Profile.isSignedIn() ? Profile.email() : null;
+    rows.forEach(function(r, idx){
+      var row = document.createElement("div");
+      row.className = "lb-row" + (myUid && r.email === myUid ? " me" : "");
+      row.innerHTML =
+        '<span class="lb-rank'+(idx<3 ? " top" : "")+'">'+(idx+1)+'</span>'+
+        '<img class="lb-avatar" src="'+(r.avatar||DEFAULT_AVATAR)+'" alt="">'+
+        '<span class="lb-name">'+(r.name||"Diver")+'</span>'+
+        '<span class="lb-memos"><img src="https://iili.io/noXdxMG.png" alt="" class="memos-icon">'+(r.memos||0)+'</span>';
+      list.appendChild(row);
+    });
+  }
+
+  function loadLeaderboard(){
+    $("lbList").innerHTML = '<p class="note">Loading…</p>';
+    if(!initFirebase()){
+      $("lbList").innerHTML = '<p class="note">Firebase isn\'t configured yet, so there\'s no shared leaderboard to show.</p>';
+      return;
+    }
+    db.ref("users").orderByChild("memos").limitToLast(50).once("value").then(function(snap){
+      var rows = [];
+      snap.forEach(function(child){ rows.push(child.val()); });
+      rows.reverse();
+      renderLeaderboardRows(rows);
+    }).catch(function(e){
+      console.error(e);
+      $("lbList").innerHTML = '<p class="note">Couldn\'t load the leaderboard right now.</p>';
+    });
+  }
+
+  $("bLeaderboard").addEventListener("click", function(){
+    Sound.init(); Sound.ui();
+    show("leaderboard");
+    loadLeaderboard();
+  });
+  $("bLeaderboardBack").addEventListener("click", function(){ Sound.init(); show("menu"); });
+
+  applyEquippedTheme();
   hud();
 });
 })();
