@@ -955,6 +955,7 @@ var db = null, auth = null, googleProvider = null, fbReady = false, started = fa
 var room = { code:null, role:null, ref:null, seenMove:0, seenResult:0, rematchMine:false, bots:{}, botMoving:false, lastData:null };
 var pendingRoomSize = 2;
 var onEmoteReceived = function(d){}; // wired up in DOMContentLoaded, called from onRoom
+var resetEmoteBubbles = function(){}; // wired up in DOMContentLoaded, called from startOnlineGame
 
 function $(id){ return document.getElementById(id); }
 function later(fn, ms){ var t = setTimeout(fn, ms); timers.push(t); return t; }
@@ -2645,11 +2646,12 @@ document.addEventListener("DOMContentLoaded", function(){
     if(emoteBubbleTimers[id]) clearTimeout(emoteBubbleTimers[id]);
     emoteBubbleTimers[id] = setTimeout(function(){ el.classList.remove("show"); }, 2200);
   }
-  function resetEmoteBubbles(){
+  function resetEmoteBubblesImpl(){
     ["bubbleYou","bubbleFoe"].forEach(function(id){
       var el = $(id); if(el) el.classList.remove("show");
     });
   }
+  resetEmoteBubbles = resetEmoteBubblesImpl;
   var lastSeenEmote = 0;
   function handleIncomingEmote(d){
     if(!d.emote || d.emote.by === room.role) return;
