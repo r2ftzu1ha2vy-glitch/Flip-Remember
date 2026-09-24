@@ -1533,68 +1533,68 @@ function joinRoom(){
 
   $("bCreate").disabled = true; $("bJoin").disabled = true;
   var ref = db.ref("rooms/"+code);
-  var claimedSlot = null;
 
   ref.once("value").then(function(snap){
-    if(!snap.exists()){ toast("No room with that code.", true); return null; }
-    if(snap.val().status !== "waiting"){ toast("That room has already started.", true); return null; }
-
-    return ref.transaction(function(d){
-      if(d === null) return; // room vanished between the check above and now
-      if(d.status !== "waiting") return; // started/full in the meantime
-      var max = d.maxPlayers || 2, mySlot = null;
-      for(var n=2;n<=max;n++){ var k="p"+n; if(!d[k]){ mySlot = k; break; } }
-      if(!mySlot) return; // no empty slot — full
-      claimedSlot = mySlot;
-      var p = Profile.get();
-      d[mySlot] = { online:true, isBot:false, progress:0, target:1, rematch:false, name:p.name, avatar:p.avatar };
-      var filled = 0;
-      for(var n2=1;n2<=max;n2++){ if(d["p"+n2]) filled++; }
-      if(filled >= max) d.status = "playing";
-      return d;
-    });
-  }).then(function(result){
-    if(!result) return; // already toasted above
-    if(!result.committed || !claimedSlot){
-      // Firebase resolves transactions as committed:false both when the room is
-      // genuinely full AND when the security rules reject the write — so check
-      // which one actually happened before blaming "full".
-      ref.once("value").then(function(freshSnap){
-        var d = freshSnap.val();
-        if(!d){ toast("That room no longer exists.", true); return; }
-        var max = d.maxPlayers || 2, hasOpenSlot = false;
-        for(var n=2;n<=max;n++){ if(!d["p"+n]){ hasOpenSlot = true; break; } }
-        if(d.status !== "waiting"){
-          toast("That room has already started.", true);
-        }else if(!hasOpenSlot){
-          toast("That room is already full.", true);
-        }else{
-          toast("Couldn't join — your Firebase rules may be rejecting a field this room uses (e.g. totalCards). Check the console.", true);
-        }
-      }).catch(function(){
-        toast("That room is already full or has started.", true);
-      });
-      return;
-    }
-    var d = result.snapshot.val();
-    room.code = code; room.role = claimedSlot;
-    room.seenMove = 0; room.seenResult = 0; room.rematchMine = false;
-    room.bots = {}; room.botMoving = false; room.lastData = null;
-    room.ref = ref;
-    started = false;
-    ref.child(claimedSlot+"/online").onDisconnect().set(false);
-    Sound.join();
-    attachRoom();
-    if(d.status !== "playing"){
-      $("lobbyCode").textContent = code;
-      renderLobby(d, d.maxPlayers || 2);
-      show("lobby");
-    }
+    if(!snap.exists()){ toast("No room with that code.", true); return; }
+    var d0 = snap.val();
+    if(d0.status !== "waiting"){ toast("That room has already started.", true); return; }
+    var max = d0.maxPlayers || 2, candidates = [];
+    for(var n=2;n<=max;n++){ var k="p"+n; if(!d0[k]) candidates.push(k); }
+    if(!candidates.length){ toast("That room is already full.", true); return; }
+    return claimSlot(ref, code, candidates, 0, max);
   }).catch(function(e){
     console.error(e);
     toast("Could not join — check your database rules.", true);
   }).then(function(){
     $("bCreate").disabled = false; $("bJoin").disabled = false;
+  });
+}
+
+// Claims one slot at a time via a transaction scoped to just that slot's own
+// path (rooms/$code/pN), instead of rewriting the whole room object. This way
+// the write only has to satisfy that one slot's validation rules — not every
+// field in the room — so unrelated/legacy data elsewhere can't block a join.
+function claimSlot(ref, code, candidates, idx, max){
+  if(idx >= candidates.length){ toast("That room is already full.", true); return; }
+  var slot = candidates[idx];
+  var p = Profile.get();
+  var payload = { online:true, isBot:false, progress:0, target:1, rematch:false, name:p.name, avatar:p.avatar };
+
+  return ref.child(slot).transaction(function(cur){
+    if(cur !== null) return; // someone already claimed this slot — try the next
+    return payload;
+  }).then(function(result){
+    if(!result.committed){
+      return claimSlot(ref, code, candidates, idx+1, max); // slot taken, or rejected — move on
+    }
+    room.code = code; room.role = slot;
+    room.seenMove = 0; room.seenResult = 0; room.rematchMine = false;
+    room.bots = {}; room.botMoving = false; room.lastData = null;
+    room.ref = ref;
+    started = false;
+    ref.child(slot+"/online").onDisconnect().set(false);
+    Sound.join();
+
+    return ref.once("value").then(function(freshSnap){
+      var d = freshSnap.val();
+      var filled = 0;
+      for(var n=1;n<=max;n++){ if(d["p"+n]) filled++; }
+      var markFull = (filled >= max && d.status === "waiting") ? ref.update({status:"playing"}) : Promise.resolve();
+      return markFull.then(function(){
+        attachRoom();
+        return ref.once("value");
+      });
+    }).then(function(freshSnap2){
+      var d = freshSnap2.val();
+      if(d.status !== "playing"){
+        $("lobbyCode").textContent = code;
+        renderLobby(d, d.maxPlayers || 2);
+        show("lobby");
+      }
+    });
+  }).catch(function(e){
+    console.error("claimSlot("+slot+") failed:", e);
+    return claimSlot(ref, code, candidates, idx+1, max);
   });
 }
 
