@@ -320,9 +320,17 @@ button:focus-visible{ outline:2px solid var(--foam); outline-offset:4px; }
 .admin-row{ cursor:pointer; transition:background .2s ease, border-color .2s ease; }
 .admin-row:hover{ background:rgba(255,255,255,.06); border-color:var(--line-strong); }
 .admin-row.open{ border-color:rgba(127,216,196,.4); background:rgba(127,216,196,.06); }
-.admin-grant-form{ display:flex; align-items:center; gap:8px; padding:4px 16px 12px 16px; margin-top:-8px; }
+.admin-grant-form{ display:flex; flex-direction:column; gap:10px; padding:6px 16px 16px 16px; margin-top:-8px; }
+.admin-grant-form .arow{ display:flex; align-items:center; gap:8px; }
+.admin-grant-form .arow-label{ flex:0 0 56px; font-size:.66rem; letter-spacing:.1em; color:var(--text-dim); text-transform:uppercase; }
 .admin-grant-form input{ flex:1; min-width:0; }
+.admin-grant-form .btn-danger{ color:var(--coral); background:rgba(224,138,138,.1); border:1px solid rgba(224,138,138,.35); }
+.admin-grant-form .btn-danger:hover{ background:rgba(224,138,138,.18); }
 .admin-grant-note{ font-size:.78rem; color:var(--text-dim); padding:0 16px 8px 16px; }
+.title-badge{ display:inline-flex; align-items:center; padding:2px 8px; border-radius:999px; font-size:.6rem; font-weight:500; letter-spacing:.1em; text-transform:uppercase; color:var(--sand); background:rgba(230,211,163,.12); border:1px solid rgba(230,211,163,.3); white-space:nowrap; flex:0 0 auto; }
+.ban-badge{ display:inline-flex; align-items:center; padding:2px 8px; border-radius:999px; font-size:.6rem; font-weight:500; letter-spacing:.1em; text-transform:uppercase; color:var(--coral); background:rgba(224,138,138,.12); border:1px solid rgba(224,138,138,.3); white-space:nowrap; flex:0 0 auto; }
+.lb-name{ display:flex; align-items:center; gap:7px; }
+.profile-chip-name{ display:flex; align-items:center; gap:6px; }
 </style>
 </head>
 <body>
@@ -692,7 +700,7 @@ button:focus-visible{ outline:2px solid var(--foam); outline-offset:4px; }
   <div class="screen hidden" id="s-admin">
     <div style="margin-top:7vh"></div>
     <h2 style="font-weight:200; letter-spacing:.2em; font-size:1.3rem; margin:0">ADMIN</h2>
-    <p class="note" style="margin-top:8px">Click a player to grant or dock memos.</p>
+    <p class="note" style="margin-top:8px">Click a player to grant/dock memos (or give infinite with "inf"), set a title, or ban them.</p>
     <div class="lb-list" id="adminList"></div>
     <div class="btn-row" style="margin-top:36px; margin-bottom:20px">
       <button class="btn btn-ghost" id="bAdminBack">Back</button>
@@ -819,6 +827,12 @@ var ADMIN_EMAILS = ["r2ftzu1ha2vy@gmail.com"];
 // attachAccount() by "no users/{uid} record exists yet" — see below.
 var SIGNUP_BONUS = 200;
 
+// Memo balance value that means "infinite". Firebase/JSON can't store
+// Infinity, so admins grant this large sentinel instead and the UI renders
+// any balance at or above it as "∞".
+var INF_MEMOS = 999999999999;
+function fmtMemos(n){ n = Number(n) || 0; return n >= INF_MEMOS ? "∞" : n; }
+
 var Profile = (function(){
   var KEY = "farProfile";
   var LINK_KEY = "farLinkedUid";
@@ -835,7 +849,7 @@ var Profile = (function(){
     }catch(e){ return Math.floor(Math.random()*9000)+1000; }
   }
 
-  function def(){ return { avatar:DEFAULT_AVATAR, name:"Player" + nextPlayerNumber(), memos:0, themes:["default"], equippedTheme:"default", emote:"wave" }; }
+  function def(){ return { avatar:DEFAULT_AVATAR, name:"Player" + nextPlayerNumber(), memos:0, themes:["default"], equippedTheme:"default", emote:"wave", title:"" }; }
 
   function load(){
     try{
@@ -845,6 +859,7 @@ var Profile = (function(){
       if(data.themes.indexOf("default") === -1) data.themes.unshift("default");
       if(!data.equippedTheme) data.equippedTheme = "default";
       if(!data.emote) data.emote = "wave";
+      if(!data.title) data.title = "";
     }catch(e){ data = def(); }
     return data;
   }
@@ -933,6 +948,16 @@ var Profile = (function(){
     var signupBonusLogged = null;
     return userRef.once("value").then(function(snap){
       var remote = snap.val();
+
+      // Banned accounts never get attached — bail out before touching any
+      // local/remote state so a banned player can't keep playing signed in.
+      if(remote && remote.banned){
+        userRef = null; authUser = null;
+        var banErr = new Error(remote.banReason ? ("You've been banned: " + remote.banReason) : "You've been banned from this account.");
+        banErr.banned = true; banErr.banReason = remote.banReason || "";
+        throw banErr;
+      }
+
       var localIsCustomized = local.avatar && local.avatar !== DEFAULT_AVATAR;
       var googleAvatar = user.photoURL || null;
       if(remote && alreadyLinked){
@@ -942,7 +967,8 @@ var Profile = (function(){
           avatar: remote.avatar || DEFAULT_AVATAR, name: remote.name || local.name, memos: remote.memos || 0,
           themes: (remote.themes && remote.themes.length) ? remote.themes : (local.themes || ["default"]),
           equippedTheme: remote.equippedTheme || local.equippedTheme || "default",
-          emote: remote.emote || local.emote || "👋"
+          emote: remote.emote || local.emote || "👋",
+          title: remote.title || ""
         };
       }else if(remote){
         // First time this device has linked to this account: genuine one-time merge.
@@ -952,7 +978,8 @@ var Profile = (function(){
           memos:  (remote.memos || 0) + (local.memos || 0),
           themes: Array.from(new Set((remote.themes || []).concat(local.themes || ["default"]))),
           equippedTheme: remote.equippedTheme || local.equippedTheme || "default",
-          emote: remote.emote || local.emote || "👋"
+          emote: remote.emote || local.emote || "👋",
+          title: remote.title || ""
         };
         mergeLogged = local.memos || 0;
       }else{
@@ -967,19 +994,25 @@ var Profile = (function(){
           memos:  (local.memos || 0) + SIGNUP_BONUS,
           themes: local.themes || ["default"],
           equippedTheme: local.equippedTheme || "default",
-          emote: local.emote || "👋"
+          emote: local.emote || "👋",
+          title: ""
         };
         signupBonusLogged = SIGNUP_BONUS;
       }
       try{ localStorage.setItem(LINK_KEY, user.uid); }catch(e){}
-      return userRef.set({ avatar:data.avatar, name:data.name, memos:data.memos, email:user.email || null, themes:data.themes, equippedTheme:data.equippedTheme, emote:data.emote });
+      // update(), not set() — this must never clobber admin-only fields
+      // (title, banned, banReason) or the ledger subtree that already live
+      // on this record.
+      return userRef.update({ avatar:data.avatar, name:data.name, memos:data.memos, email:user.email || null, themes:data.themes, equippedTheme:data.equippedTheme, emote:data.emote });
     }).then(function(){
       save();
       renderChip();
       if(mergeLogged !== null) logLedger("account_merge_local_carryover", mergeLogged, data.memos);
       if(signupBonusLogged !== null) logLedger("signup_bonus", signupBonusLogged, data.memos);
     }).catch(function(e){
-      console.error("Account sync failed:", e);
+      userRef = null; authUser = null;
+      if(!e || !e.banned) console.error("Account sync failed:", e);
+      throw e;
     });
   }
 
@@ -1037,12 +1070,70 @@ var Profile = (function(){
     });
   }
 
+  // Sets (rather than adds to) every matching account's memo balance —
+  // used by the admin panel's "inf" shortcut to grant unlimited memos.
+  function adminSetMemos(targetEmail, value){
+    if(!isAdmin()) return Promise.reject(new Error("not admin"));
+    var n = Number(value);
+    if(!isFinite(n) || n < 0) return Promise.reject(new Error("amount must be a non-negative number"));
+    return adminFindByEmail(targetEmail).then(function(matches){
+      if(!matches.length) throw new Error("no account found for " + targetEmail);
+      return Promise.all(matches.map(function(m){
+        var ref = db.ref("users/" + m.uid);
+        return ref.update({ memos: n }).then(function(){
+          return ref.child("ledger").push({
+            reason: "admin_set_memos", delta: n - (m.memos || 0), balance: n,
+            grantedBy: authUser.email, ts: firebase.database.ServerValue.TIMESTAMP
+          });
+        }).then(function(){
+          if(authUser && m.email === authUser.email){ data.memos = n; save(); renderChip(); }
+          return { uid: m.uid, email: m.email, name: m.name, newBalance: n };
+        });
+      }));
+    });
+  }
+
+  // Grants (or clears) a display title shown next to a player's name.
+  function adminSetTitle(targetEmail, title){
+    if(!isAdmin()) return Promise.reject(new Error("not admin"));
+    var t = String(title || "").trim().slice(0, 24);
+    return adminFindByEmail(targetEmail).then(function(matches){
+      if(!matches.length) throw new Error("no account found for " + targetEmail);
+      return Promise.all(matches.map(function(m){
+        var ref = db.ref("users/" + m.uid);
+        return ref.update({ title: t }).then(function(){
+          if(authUser && m.email === authUser.email){ data.title = t; save(); renderChip(); }
+          return { uid: m.uid, email: m.email, name: m.name, title: t };
+        });
+      }));
+    });
+  }
+
+  // Bans (or unbans) an account. A banned account is refused at the next
+  // sign-in / attachAccount call — see the "banned" check in attachAccount.
+  function adminSetBan(targetEmail, banned, reason){
+    if(!isAdmin()) return Promise.reject(new Error("not admin"));
+    var r = String(reason || "").trim().slice(0, 200);
+    return adminFindByEmail(targetEmail).then(function(matches){
+      if(!matches.length) throw new Error("no account found for " + targetEmail);
+      return Promise.all(matches.map(function(m){
+        var ref = db.ref("users/" + m.uid);
+        return ref.update({
+          banned: !!banned, banReason: banned ? r : "",
+          bannedBy: banned ? authUser.email : null, bannedAt: banned ? firebase.database.ServerValue.TIMESTAMP : null
+        }).then(function(){
+          return { uid: m.uid, email: m.email, name: m.name, banned: !!banned, banReason: banned ? r : "" };
+        });
+      }));
+    });
+  }
+
   function renderChip(){
     get();
     $("chipAvatarImg").src = data.avatar;
     $("chipAvatarImg").style.display = "";
-    $("chipName").textContent = data.name;
-    $("chipMemos").textContent = data.memos;
+    $("chipName").innerHTML = escapeHtml(data.name) + (data.title ? ' <span class="title-badge">'+escapeHtml(data.title)+'</span>' : "");
+    $("chipMemos").textContent = fmtMemos(data.memos);
     var yAva = $("pYouAvatar"), yLbl = $("youLabel");
     if(yAva){ yAva.src = data.avatar; yAva.classList.add("on"); }
     if(yLbl){ yLbl.textContent = data.name; }
@@ -1053,7 +1144,8 @@ var Profile = (function(){
     renderChip:renderChip, isSignedIn:isSignedIn, email:email, attachAccount:attachAccount, detachAccount:detachAccount,
     ownsTheme:ownsTheme, equippedTheme:equippedTheme, equipTheme:equipTheme, rollTheme:rollTheme,
     emote:emote, setEmote:setEmote,
-    isAdmin:isAdmin, adminFindByEmail:adminFindByEmail, adminGrantMemos:adminGrantMemos
+    isAdmin:isAdmin, adminFindByEmail:adminFindByEmail, adminGrantMemos:adminGrantMemos,
+    adminSetMemos:adminSetMemos, adminSetTitle:adminSetTitle, adminSetBan:adminSetBan
   };
 })();
 
@@ -1072,6 +1164,7 @@ var onEmoteReceived = function(d){}; // wired up in DOMContentLoaded, called fro
 var resetEmoteBubbles = function(){}; // wired up in DOMContentLoaded, called from startOnlineGame
 
 function $(id){ return document.getElementById(id); }
+function escapeHtml(s){ return String(s==null?"":s).replace(/[&<>"']/g, function(c){ return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]; }); }
 function later(fn, ms){ var t = setTimeout(fn, ms); timers.push(t); return t; }
 function clearTimers(){ timers.forEach(clearTimeout); timers = []; }
 
@@ -1582,22 +1675,36 @@ function initFirebase(){
             if(Profile.isAdmin()){
               window.grantMemos = Profile.adminGrantMemos;
               window.findAccount = Profile.adminFindByEmail;
+              window.setMemos = Profile.adminSetMemos;
+              window.setTitle = Profile.adminSetTitle;
+              window.banUser = Profile.adminSetBan;
               $("bAdmin").classList.remove("hidden");
               console.log(
                 "Admin commands ready.\n" +
                 "  findAccount('someone@example.com').then(console.log)\n" +
                 "  grantMemos('someone@example.com', 500).then(console.log)  // negative amount to dock\n" +
+                "  setMemos('someone@example.com', " + INF_MEMOS + ").then(console.log)  // absolute set, e.g. infinite\n" +
+                "  setTitle('someone@example.com', 'Founder').then(console.log)  // '' clears it\n" +
+                "  banUser('someone@example.com', true, 'reason').then(console.log)  // false to unban\n" +
                 "Or use the shield icon in the top bar for the same thing with a UI.\n" +
                 "Client-side gate only — see ADMIN_EMAILS comment for the real security story."
               );
             }else{
               delete window.grantMemos; delete window.findAccount;
+              delete window.setMemos; delete window.setTitle; delete window.banUser;
               $("bAdmin").classList.add("hidden");
             }
+          }).catch(function(e){
+            // Covers a banned account resuming an already-signed-in session
+            // (e.g. reloading the page) — attachAccount already cleared
+            // Profile's local state, this just also ends the auth session.
+            if(e && e.banned){ if(auth) auth.signOut(); toast(e.message); }
+            $("bAdmin").classList.add("hidden");
           });
         }else{
           Profile.detachAccount();
           delete window.grantMemos; delete window.findAccount;
+          delete window.setMemos; delete window.setTitle; delete window.banUser;
           $("bAdmin").classList.add("hidden");
         }
       });
@@ -2346,7 +2453,7 @@ document.addEventListener("DOMContentLoaded", function(){
 
   function openProfile(){
     var p = Profile.get();
-    $("profBalance").textContent = p.memos;
+    $("profBalance").textContent = fmtMemos(p.memos);
     $("avaCurrentImg").src = p.avatar;
     $("avaCurrentImg").style.display = "";
     pendingAvatar = null;
@@ -2392,6 +2499,15 @@ document.addEventListener("DOMContentLoaded", function(){
     }
   }
 
+  // If Profile.attachAccount rejected because the account is banned, make
+  // sure the Firebase Auth session itself is also torn down (attachAccount
+  // only cleared Profile's local references) so the person can't stay
+  // signed in with a banned account.
+  function handleAuthError(e){
+    if(e && e.banned && auth) auth.signOut();
+    $("acctNote").textContent = authErrorMessage(e);
+  }
+
   $("bProfile").addEventListener("click", function(){ Sound.init(); Sound.ui(); openProfile(); });
   $("bProfileBack").addEventListener("click", function(){ Sound.init(); show("menu"); });
 
@@ -2405,13 +2521,13 @@ document.addEventListener("DOMContentLoaded", function(){
     auth.createUserWithEmailAndPassword(email, pass).then(function(cred){
       return Profile.attachAccount(cred.user);
     }).then(function(){
-      $("profBalance").textContent = Profile.get().memos;
+      $("profBalance").textContent = fmtMemos(Profile.get().memos);
       $("nameInput").placeholder = Profile.get().name;
       refreshAccountPanel();
       $("acctNote").textContent = "";
       toast("Account created. +" + SIGNUP_BONUS + " memos. Your profile now syncs to this account.");
     }).catch(function(e){
-      $("acctNote").textContent = authErrorMessage(e);
+      handleAuthError(e);
     }).then(function(){ authBusy(false); });
   });
 
@@ -2425,13 +2541,13 @@ document.addEventListener("DOMContentLoaded", function(){
     auth.signInWithEmailAndPassword(email, pass).then(function(cred){
       return Profile.attachAccount(cred.user);
     }).then(function(){
-      $("profBalance").textContent = Profile.get().memos;
+      $("profBalance").textContent = fmtMemos(Profile.get().memos);
       $("nameInput").placeholder = Profile.get().name;
       refreshAccountPanel();
       $("acctNote").textContent = "";
       toast("Signed in.");
     }).catch(function(e){
-      $("acctNote").textContent = authErrorMessage(e);
+      handleAuthError(e);
     }).then(function(){ authBusy(false); });
   });
 
@@ -2442,14 +2558,14 @@ document.addEventListener("DOMContentLoaded", function(){
     auth.signInWithPopup(googleProvider).then(function(cred){
       return Profile.attachAccount(cred.user);
     }).then(function(){
-      $("profBalance").textContent = Profile.get().memos;
+      $("profBalance").textContent = fmtMemos(Profile.get().memos);
       $("nameInput").placeholder = Profile.get().name;
       $("avaCurrentImg").src = Profile.get().avatar;
       refreshAccountPanel();
       $("acctNote").textContent = "";
       toast("Signed in with Google.");
     }).catch(function(e){
-      $("acctNote").textContent = authErrorMessage(e);
+      handleAuthError(e);
     }).then(function(){ authBusy(false); });
   });
 
@@ -2457,7 +2573,7 @@ document.addEventListener("DOMContentLoaded", function(){
     Sound.init();
     if(auth) auth.signOut();
     Profile.detachAccount();
-    $("profBalance").textContent = Profile.get().memos;
+    $("profBalance").textContent = fmtMemos(Profile.get().memos);
     $("nameInput").placeholder = Profile.get().name;
     $("avaCurrentImg").src = Profile.get().avatar;
     refreshAccountPanel();
@@ -2477,7 +2593,7 @@ document.addEventListener("DOMContentLoaded", function(){
     Profile.spend(COST_AVATAR, "avatar_change");
     Profile.setAvatar(pendingAvatar);
     $("avaCurrentImg").src = pendingAvatar;
-    $("profBalance").textContent = Profile.get().memos;
+    $("profBalance").textContent = fmtMemos(Profile.get().memos);
     $("avaNote").textContent = "Profile picture updated.";
     pendingAvatar = null;
     avaFileInput.value = ""; $("avaFileName").textContent = "";
@@ -2506,7 +2622,7 @@ document.addEventListener("DOMContentLoaded", function(){
     Profile.setName(v);
     $("nameInput").value = "";
     $("nameInput").placeholder = v;
-    $("profBalance").textContent = Profile.get().memos;
+    $("profBalance").textContent = fmtMemos(Profile.get().memos);
     $("bSaveName").disabled = true;
     $("nameNote").textContent = "Username updated.";
     Sound.ui();
@@ -2699,7 +2815,7 @@ document.addEventListener("DOMContentLoaded", function(){
       if(!result.ok){ $("rollNote").textContent = "Not enough memos."; Sound.miss(); return; }
       var theme = THEME_BY_ID[result.id];
       disc.innerHTML = themeDiscSVG(theme);
-      $("profBalance") && ($("profBalance").textContent = Profile.get().memos);
+      $("profBalance") && ($("profBalance").textContent = fmtMemos(Profile.get().memos));
       if(result.isNew){
         Sound.hit(6);
         $("rollNote").textContent = "New theme: " + theme.name + " (" + RARITY_LABEL[theme.rarity] + ")!";
@@ -2827,8 +2943,9 @@ document.addEventListener("DOMContentLoaded", function(){
       row.innerHTML =
         '<span class="lb-rank'+(idx<3 ? " top" : "")+'">'+(idx+1)+'</span>'+
         '<img class="lb-avatar" src="'+(r.avatar||DEFAULT_AVATAR)+'" alt="">'+
-        '<span class="lb-name">'+(r.name||"Diver")+'</span>'+
-        '<span class="lb-memos"><img src="https://iili.io/noXdxMG.png" alt="" class="memos-icon">'+(r.memos||0)+'</span>';
+        '<span class="lb-name"><span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+escapeHtml(r.name||"Diver")+'</span>'+
+          (r.title ? '<span class="title-badge">'+escapeHtml(r.title)+'</span>' : "")+'</span>'+
+        '<span class="lb-memos"><img src="https://iili.io/noXdxMG.png" alt="" class="memos-icon">'+fmtMemos(r.memos||0)+'</span>';
       list.appendChild(row);
     });
   }
@@ -2869,10 +2986,15 @@ document.addEventListener("DOMContentLoaded", function(){
       var row = document.createElement("div");
       row.className = "lb-row admin-row";
       row.dataset.email = r.email || "";
+      row.dataset.title = r.title || "";
+      row.dataset.banned = r.banned ? "1" : "";
+      row.dataset.banReason = r.banReason || "";
       row.innerHTML =
         '<img class="lb-avatar" src="'+(r.avatar||DEFAULT_AVATAR)+'" alt="">'+
-        '<span class="lb-name">'+(r.name||"Diver")+' <span style="color:var(--text-dim)">— '+(r.email||"")+'</span></span>'+
-        '<span class="lb-memos"><img src="https://iili.io/noXdxMG.png" alt="" class="memos-icon">'+(r.memos||0)+'</span>';
+        '<span class="lb-name"><span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+escapeHtml(r.name||"Diver")+' <span style="color:var(--text-dim)">— '+escapeHtml(r.email||"")+'</span></span>'+
+          (r.title ? '<span class="title-badge">'+escapeHtml(r.title)+'</span>' : "")+
+          (r.banned ? '<span class="ban-badge">Banned</span>' : "")+'</span>'+
+        '<span class="lb-memos"><img src="https://iili.io/noXdxMG.png" alt="" class="memos-icon">'+fmtMemos(r.memos||0)+'</span>';
       list.appendChild(row);
     });
   }
@@ -2894,38 +3016,123 @@ document.addEventListener("DOMContentLoaded", function(){
 
     row.classList.add("open");
     var email = row.dataset.email;
+    var isBanned = row.dataset.banned === "1";
     var form = document.createElement("div");
     form.className = "admin-grant-form";
     form.innerHTML =
-      '<input class="name-input" type="number" step="1" placeholder="Amount (negative to dock)">' +
-      '<button class="btn btn-primary btn-small">Give</button>';
-    var input = form.querySelector("input");
-    var giveBtn = form.querySelector("button");
+      '<div class="arow">'+
+        '<span class="arow-label">Memos</span>'+
+        '<input class="name-input memoInput" type="text" placeholder="Amount, or \'inf\' for infinite (negative to dock)">'+
+        '<button class="btn btn-primary btn-small giveBtn">Give</button>'+
+      '</div>'+
+      '<div class="arow">'+
+        '<span class="arow-label">Title</span>'+
+        '<input class="name-input titleInput" type="text" maxlength="24" placeholder="e.g. Founder" value="'+escapeHtml(row.dataset.title||"")+'">'+
+        '<button class="btn btn-ghost btn-small titleBtn">Set</button>'+
+      '</div>'+
+      '<div class="arow">'+
+        (isBanned
+          ? '<span class="arow-label">Banned</span><span class="admin-ban-current" style="flex:1">'+escapeHtml(row.dataset.banReason||"no reason given")+'</span><button class="btn btn-ghost btn-small unbanBtn">Unban</button>'
+          : '<span class="arow-label">Ban</span><input class="name-input banInput" type="text" placeholder="Reason for ban"><button class="btn btn-danger btn-small banBtn">Ban</button>')+
+      '</div>';
+    var memoInput = form.querySelector(".memoInput");
+    var giveBtn = form.querySelector(".giveBtn");
+    var titleInput = form.querySelector(".titleInput");
+    var titleBtn = form.querySelector(".titleBtn");
+    var banInput = form.querySelector(".banInput");
+    var banBtn = form.querySelector(".banBtn");
+    var unbanBtn = form.querySelector(".unbanBtn");
     var note = document.createElement("div");
     note.className = "admin-grant-note";
     row.insertAdjacentElement("afterend", form);
     form.insertAdjacentElement("afterend", note);
-    input.focus();
+    memoInput.focus();
 
-    function apply(){
-      var amount = Number(input.value);
-      if(!input.value.trim() || isNaN(amount) || amount === 0){ note.textContent = "Enter a non-zero amount."; return; }
+    function applyMemos(){
+      var raw = memoInput.value.trim();
+      if(!raw){ note.textContent = "Enter an amount, or 'inf' for infinite."; return; }
+      var isInf = /^inf(inite)?$/i.test(raw);
       giveBtn.disabled = true; note.textContent = "Applying…";
-      Profile.adminGrantMemos(email, amount).then(function(results){
+      var action = isInf
+        ? Profile.adminSetMemos(email, INF_MEMOS)
+        : (function(){
+            var amount = Number(raw);
+            if(isNaN(amount) || amount === 0) return Promise.reject(new Error("Enter a non-zero amount, or 'inf'."));
+            return Profile.adminGrantMemos(email, amount);
+          })();
+      action.then(function(results){
         var newBalance = results[0] ? results[0].newBalance : null;
         if(newBalance !== null) row.querySelector(".lb-memos").innerHTML =
-          '<img src="https://iili.io/noXdxMG.png" alt="" class="memos-icon">'+newBalance;
-        note.textContent = "Done — " + (amount > 0 ? "+" : "") + amount + " memos applied.";
-        toast((amount > 0 ? "Gave " : "Docked ") + Math.abs(amount) + " memos" + (amount<0?" from ":" to ") + email + ".");
-        input.value = "";
+          '<img src="https://iili.io/noXdxMG.png" alt="" class="memos-icon">'+fmtMemos(newBalance);
+        note.textContent = isInf ? "Done — infinite memos granted." : "Done — " + (Number(raw) > 0 ? "+" : "") + raw + " memos applied.";
+        toast(isInf ? ("Gave " + email + " infinite memos.") : ((Number(raw) > 0 ? "Gave " : "Docked ") + Math.abs(raw) + " memos" + (Number(raw)<0?" from ":" to ") + email + "."));
+        memoInput.value = "";
         Sound.hit(1);
       }).catch(function(e){
         note.textContent = e.message || "Grant failed.";
         Sound.miss();
       }).then(function(){ giveBtn.disabled = false; });
     }
-    giveBtn.addEventListener("click", apply);
-    input.addEventListener("keydown", function(e){ if(e.key === "Enter") apply(); });
+    giveBtn.addEventListener("click", applyMemos);
+    memoInput.addEventListener("keydown", function(e){ if(e.key === "Enter") applyMemos(); });
+
+    function applyTitle(){
+      var t = titleInput.value.trim();
+      titleBtn.disabled = true; note.textContent = "Applying…";
+      Profile.adminSetTitle(email, t).then(function(results){
+        var nameSpan = row.querySelector(".lb-name");
+        var existingBadge = nameSpan.querySelector(".title-badge");
+        if(existingBadge) existingBadge.remove();
+        if(t){
+          var badge = document.createElement("span");
+          badge.className = "title-badge"; badge.textContent = t;
+          nameSpan.appendChild(badge);
+        }
+        row.dataset.title = t;
+        note.textContent = t ? ("Done — title set to \"" + t + "\".") : "Done — title cleared.";
+        toast(t ? ("Gave " + email + " the title \"" + t + "\".") : ("Cleared " + email + "'s title."));
+        Sound.hit(1);
+      }).catch(function(e){
+        note.textContent = e.message || "Setting title failed.";
+        Sound.miss();
+      }).then(function(){ titleBtn.disabled = false; });
+    }
+    titleBtn.addEventListener("click", applyTitle);
+    titleInput.addEventListener("keydown", function(e){ if(e.key === "Enter") applyTitle(); });
+
+    if(banBtn){
+      function applyBan(){
+        var reason = banInput.value.trim();
+        banBtn.disabled = true; note.textContent = "Banning…";
+        Profile.adminSetBan(email, true, reason).then(function(){
+          note.textContent = "Done — account banned.";
+          toast("Banned " + email + (reason ? (": " + reason) : "."));
+          Sound.hit(1);
+          closeAdminForm();
+          loadAdminList();
+        }).catch(function(e){
+          note.textContent = e.message || "Ban failed.";
+          Sound.miss();
+        }).then(function(){ banBtn.disabled = false; });
+      }
+      banBtn.addEventListener("click", applyBan);
+      banInput.addEventListener("keydown", function(e){ if(e.key === "Enter") applyBan(); });
+    }
+    if(unbanBtn){
+      unbanBtn.addEventListener("click", function(){
+        unbanBtn.disabled = true; note.textContent = "Unbanning…";
+        Profile.adminSetBan(email, false, "").then(function(){
+          note.textContent = "Done — account unbanned.";
+          toast("Unbanned " + email + ".");
+          Sound.hit(1);
+          closeAdminForm();
+          loadAdminList();
+        }).catch(function(e){
+          note.textContent = e.message || "Unban failed.";
+          Sound.miss();
+        }).then(function(){ unbanBtn.disabled = false; });
+      });
+    }
   });
 
   function loadAdminList(){
