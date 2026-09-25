@@ -1737,6 +1737,15 @@ function initFirebase(){
     if(firebase.auth){
       auth = firebase.auth();
       googleProvider = new firebase.auth.GoogleAuthProvider();
+      // Firebase's default persistence is already LOCAL for most setups, but
+      // some hosting contexts (sandboxed iframes, certain embeds, browsers
+      // with strict storage settings) silently fall back to session-only or
+      // in-memory persistence, which is what makes people sign in every
+      // visit. Setting it explicitly guarantees the session survives a
+      // reload or the tab being closed and reopened.
+      auth.setPersistence(firebase.auth.Auth.Persistence.LOCAL).catch(function(e){
+        console.error("Could not enable persistent sign-in — falling back to the browser default:", e);
+      });
       auth.onAuthStateChanged(function(user){
         if(user && !user.isAnonymous){
           Profile.attachAccount(user).then(function(){
