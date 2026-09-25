@@ -316,6 +316,13 @@ button:focus-visible{ outline:2px solid var(--foam); outline-offset:4px; }
 .lb-avatar{ width:32px; height:32px; border-radius:50%; object-fit:cover; flex:0 0 auto; background:var(--slate); }
 .lb-name{ flex:1; font-size:.88rem; color:var(--text-soft); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 .lb-memos{ display:flex; align-items:center; gap:5px; font-size:.85rem; color:var(--sand); flex:0 0 auto; }
+
+.admin-row{ cursor:pointer; transition:background .2s ease, border-color .2s ease; }
+.admin-row:hover{ background:rgba(255,255,255,.06); border-color:var(--line-strong); }
+.admin-row.open{ border-color:rgba(127,216,196,.4); background:rgba(127,216,196,.06); }
+.admin-grant-form{ display:flex; align-items:center; gap:8px; padding:4px 16px 12px 16px; margin-top:-8px; }
+.admin-grant-form input{ flex:1; min-width:0; }
+.admin-grant-note{ font-size:.78rem; color:var(--text-dim); padding:0 16px 8px 16px; }
 </style>
 </head>
 <body>
@@ -362,6 +369,12 @@ button:focus-visible{ outline:2px solid var(--foam); outline-offset:4px; }
         <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
           <rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/>
           <rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/>
+        </svg>
+      </button>
+      <button class="icon-btn hidden" id="bAdmin" aria-label="Admin">
+        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M12 2 4 5v6c0 5 3.5 8.5 8 11 4.5-2.5 8-6 8-11V5l-8-3z"/>
+          <path d="M9 12l2 2 4-4"/>
         </svg>
       </button>
       <button class="icon-btn" id="bLeaderboard" aria-label="Leaderboard">
@@ -507,22 +520,6 @@ button:focus-visible{ outline:2px solid var(--foam); outline-offset:4px; }
       <span class="block-title">ACCOUNT</span>
       <p class="note" style="margin:0">Signed in as <b style="color:var(--text)" id="acctEmailDisplay"></b>. Your profile syncs across devices.</p>
       <button class="btn btn-ghost btn-small" id="bSignOut">Sign out</button>
-    </div>
-
-    <div class="profile-card profile-section hidden" id="adminPanel">
-      <span class="block-title">ADMIN</span>
-      <p class="note" style="margin:0; max-width:340px">Grant or dock memos on any account by email. Writes straight to the database and logs to that account's ledger.</p>
-      <div class="name-row">
-        <input class="name-input" id="adminTargetEmail" type="email" autocomplete="off" spellcheck="false" placeholder="Account email">
-      </div>
-      <div class="name-row">
-        <input class="name-input" id="adminAmount" type="number" step="1" placeholder="Amount (negative to dock)">
-      </div>
-      <div class="btn-row" style="margin-top:4px">
-        <button class="btn btn-ghost btn-small" id="bAdminLookup">Look up</button>
-        <button class="btn btn-primary btn-small" id="bAdminGrant">Apply</button>
-      </div>
-      <span class="note" id="adminNote"></span>
     </div>
 
     <div class="profile-card profile-section">
@@ -689,6 +686,16 @@ button:focus-visible{ outline:2px solid var(--foam); outline-offset:4px; }
     <div class="lb-list" id="lbList"></div>
     <div class="btn-row" style="margin-top:36px; margin-bottom:20px">
       <button class="btn btn-ghost" id="bLeaderboardBack">Back</button>
+    </div>
+  </div>
+
+  <div class="screen hidden" id="s-admin">
+    <div style="margin-top:7vh"></div>
+    <h2 style="font-weight:200; letter-spacing:.2em; font-size:1.3rem; margin:0">ADMIN</h2>
+    <p class="note" style="margin-top:8px">Click a player to grant or dock memos.</p>
+    <div class="lb-list" id="adminList"></div>
+    <div class="btn-row" style="margin-top:36px; margin-bottom:20px">
+      <button class="btn btn-ghost" id="bAdminBack">Back</button>
     </div>
   </div>
 </div>
@@ -1575,19 +1582,23 @@ function initFirebase(){
             if(Profile.isAdmin()){
               window.grantMemos = Profile.adminGrantMemos;
               window.findAccount = Profile.adminFindByEmail;
+              $("bAdmin").classList.remove("hidden");
               console.log(
                 "Admin commands ready.\n" +
                 "  findAccount('someone@example.com').then(console.log)\n" +
                 "  grantMemos('someone@example.com', 500).then(console.log)  // negative amount to dock\n" +
+                "Or use the shield icon in the top bar for the same thing with a UI.\n" +
                 "Client-side gate only — see ADMIN_EMAILS comment for the real security story."
               );
             }else{
               delete window.grantMemos; delete window.findAccount;
+              $("bAdmin").classList.add("hidden");
             }
           });
         }else{
           Profile.detachAccount();
           delete window.grantMemos; delete window.findAccount;
+          $("bAdmin").classList.add("hidden");
         }
       });
     }
@@ -2197,6 +2208,7 @@ function show(name){
   $("s-end").classList.toggle("hidden", name!=="end");
   $("s-collection").classList.toggle("hidden", name!=="collection");
   $("s-leaderboard").classList.toggle("hidden", name!=="leaderboard");
+  $("s-admin").classList.toggle("hidden", name!=="admin");
 }
 
 function updateCountTexts(){
@@ -2358,8 +2370,6 @@ document.addEventListener("DOMContentLoaded", function(){
     $("acctEmail").value = "";
     $("acctPassword").value = "";
     $("acctNote").textContent = "";
-    $("adminPanel").classList.toggle("hidden", !Profile.isAdmin());
-    $("adminNote").textContent = "";
   }
 
   function authBusy(b){
@@ -2452,41 +2462,6 @@ document.addEventListener("DOMContentLoaded", function(){
     $("avaCurrentImg").src = Profile.get().avatar;
     refreshAccountPanel();
     toast("Signed out — you're playing anonymously again.");
-  });
-
-  $("bAdminLookup").addEventListener("click", function(){
-    Sound.init();
-    var target = $("adminTargetEmail").value.trim();
-    if(!target){ $("adminNote").textContent = "Enter an email to look up."; return; }
-    $("bAdminLookup").disabled = true; $("adminNote").textContent = "Looking up…";
-    Profile.adminFindByEmail(target).then(function(matches){
-      $("adminNote").textContent = matches.length
-        ? matches.map(function(m){ return (m.name || "(no name)") + " — " + m.memos + " memos"; }).join(" | ")
-        : "No account found for that email.";
-    }).catch(function(e){
-      $("adminNote").textContent = e.message || "Lookup failed.";
-    }).then(function(){ $("bAdminLookup").disabled = false; });
-  });
-
-  $("bAdminGrant").addEventListener("click", function(){
-    Sound.init();
-    var target = $("adminTargetEmail").value.trim();
-    var amount = $("adminAmount").value.trim();
-    if(!target){ $("adminNote").textContent = "Enter an email."; return; }
-    if(!amount || isNaN(Number(amount)) || Number(amount) === 0){ $("adminNote").textContent = "Enter a non-zero amount."; return; }
-    $("bAdminGrant").disabled = true; $("adminNote").textContent = "Applying…";
-    Profile.adminGrantMemos(target, Number(amount)).then(function(results){
-      $("adminNote").textContent = results.map(function(r){
-        return (r.name || r.email) + " → " + r.newBalance + " memos";
-      }).join(" | ");
-      $("adminAmount").value = "";
-      $("profBalance").textContent = Profile.get().memos;
-      toast("Applied " + amount + " memos to " + target + ".");
-      Sound.ui();
-    }).catch(function(e){
-      $("adminNote").textContent = e.message || "Grant failed.";
-      Sound.miss();
-    }).then(function(){ $("bAdminGrant").disabled = false; });
   });
 
   $("bSaveAvatar").addEventListener("click", function(){
@@ -2881,6 +2856,102 @@ document.addEventListener("DOMContentLoaded", function(){
     loadLeaderboard();
   });
   $("bLeaderboardBack").addEventListener("click", function(){ Sound.init(); show("menu"); });
+
+  /* ===== admin ===== */
+  function renderAdminRows(rows){
+    var list = $("adminList");
+    list.innerHTML = "";
+    if(!rows.length){
+      list.innerHTML = '<p class="note">No signed-in accounts yet.</p>';
+      return;
+    }
+    rows.forEach(function(r){
+      var row = document.createElement("div");
+      row.className = "lb-row admin-row";
+      row.dataset.email = r.email || "";
+      row.innerHTML =
+        '<img class="lb-avatar" src="'+(r.avatar||DEFAULT_AVATAR)+'" alt="">'+
+        '<span class="lb-name">'+(r.name||"Diver")+' <span style="color:var(--text-dim)">— '+(r.email||"")+'</span></span>'+
+        '<span class="lb-memos"><img src="https://iili.io/noXdxMG.png" alt="" class="memos-icon">'+(r.memos||0)+'</span>';
+      list.appendChild(row);
+    });
+  }
+
+  function closeAdminForm(){
+    var open = document.querySelector(".admin-grant-form");
+    if(open) open.remove();
+    var openRow = document.querySelector(".admin-row.open");
+    if(openRow) openRow.classList.remove("open");
+  }
+
+  $("adminList").addEventListener("click", function(e){
+    var row = e.target.closest(".admin-row");
+    if(!row) return;
+    Sound.init(); Sound.ui();
+    var wasOpen = row.classList.contains("open");
+    closeAdminForm();
+    if(wasOpen) return;
+
+    row.classList.add("open");
+    var email = row.dataset.email;
+    var form = document.createElement("div");
+    form.className = "admin-grant-form";
+    form.innerHTML =
+      '<input class="name-input" type="number" step="1" placeholder="Amount (negative to dock)">' +
+      '<button class="btn btn-primary btn-small">Give</button>';
+    var input = form.querySelector("input");
+    var giveBtn = form.querySelector("button");
+    var note = document.createElement("div");
+    note.className = "admin-grant-note";
+    row.insertAdjacentElement("afterend", form);
+    form.insertAdjacentElement("afterend", note);
+    input.focus();
+
+    function apply(){
+      var amount = Number(input.value);
+      if(!input.value.trim() || isNaN(amount) || amount === 0){ note.textContent = "Enter a non-zero amount."; return; }
+      giveBtn.disabled = true; note.textContent = "Applying…";
+      Profile.adminGrantMemos(email, amount).then(function(results){
+        var newBalance = results[0] ? results[0].newBalance : null;
+        if(newBalance !== null) row.querySelector(".lb-memos").innerHTML =
+          '<img src="https://iili.io/noXdxMG.png" alt="" class="memos-icon">'+newBalance;
+        note.textContent = "Done — " + (amount > 0 ? "+" : "") + amount + " memos applied.";
+        toast((amount > 0 ? "Gave " : "Docked ") + Math.abs(amount) + " memos" + (amount<0?" from ":" to ") + email + ".");
+        input.value = "";
+        Sound.hit(1);
+      }).catch(function(e){
+        note.textContent = e.message || "Grant failed.";
+        Sound.miss();
+      }).then(function(){ giveBtn.disabled = false; });
+    }
+    giveBtn.addEventListener("click", apply);
+    input.addEventListener("keydown", function(e){ if(e.key === "Enter") apply(); });
+  });
+
+  function loadAdminList(){
+    $("adminList").innerHTML = '<p class="note">Loading…</p>';
+    if(!initFirebase()){
+      $("adminList").innerHTML = '<p class="note">Firebase isn\'t configured yet, so there\'s no account list to show.</p>';
+      return;
+    }
+    db.ref("users").orderByChild("memos").limitToLast(100).once("value").then(function(snap){
+      var rows = [];
+      snap.forEach(function(child){ rows.push(child.val()); });
+      rows.reverse();
+      renderAdminRows(rows);
+    }).catch(function(e){
+      console.error(e);
+      $("adminList").innerHTML = '<p class="note">Couldn\'t load the account list right now.</p>';
+    });
+  }
+
+  $("bAdmin").addEventListener("click", function(){
+    if(!Profile.isAdmin()) return;
+    Sound.init(); Sound.ui();
+    show("admin");
+    loadAdminList();
+  });
+  $("bAdminBack").addEventListener("click", function(){ Sound.init(); show("menu"); });
 
   applyEquippedTheme();
   hud();
