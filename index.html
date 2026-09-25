@@ -669,9 +669,10 @@ button:focus-visible{ outline:2px solid var(--foam); outline-offset:4px; }
   <div class="screen hidden" id="s-collection">
     <div style="margin-top:7vh"></div>
     <h2 style="font-weight:200; letter-spacing:.2em; font-size:1.3rem; margin:0">COLLECTION</h2>
-    <p class="note" style="margin-top:8px">Roll for card themes and pick your emotes.</p>
+    <p class="note" style="margin-top:8px">Roll for card themes, titles, and pick your emotes.</p>
     <div class="tab-seg" id="collTabSeg" role="group" aria-label="Collection tab">
       <button data-tab="themes" class="active">Themes</button>
+      <button data-tab="titles">Titles</button>
       <button data-tab="emotes">Emotes</button>
     </div>
 
@@ -682,6 +683,15 @@ button:focus-visible{ outline:2px solid var(--foam); outline-offset:4px; }
         <button class="btn btn-primary btn-small" id="bRollTheme">Roll — 50 memos</button>
       </div>
       <div class="theme-grid" id="themeGrid"></div>
+    </div>
+
+    <div id="collTitles" class="hidden">
+      <div class="roll-panel">
+        <div class="roll-disc" id="rollTitleDisc"></div>
+        <span class="note" id="rollTitleNote" style="margin:0">Roll a new title for 60 memos.</span>
+        <button class="btn btn-primary btn-small" id="bRollTitle">Roll — 60 memos</button>
+      </div>
+      <div class="theme-grid" id="titleGrid"></div>
     </div>
 
     <div id="collEmotes" class="hidden">
@@ -772,6 +782,7 @@ var DIFF = {
 var ONLINE_REWARD = 50;
 var COST_AVATAR = 50, COST_USERNAME = 100;
 var COST_THEME_ROLL = 50, DUPLICATE_THEME_REFUND = 15;
+var COST_TITLE_ROLL = 60, DUPLICATE_TITLE_REFUND = 20;
 
 var CARD_COUNTS = [9,12,15];
 var CARD_COUNT_NOTES = {
@@ -805,6 +816,36 @@ function rollThemeId(){
     if(r <= 0) return ROLLABLE_THEMES[i].id;
   }
   return ROLLABLE_THEMES[ROLLABLE_THEMES.length-1].id;
+}
+
+/* ===================== titles (cosmetic, gacha) =====================
+   Same mechanic as card themes: weighted roll, owned-list + equipped,
+   synced to Firebase alongside the rest of Profile. "none" is the free
+   starter option (no badge shown). An admin-granted title (data.title,
+   set via adminSetTitle) always wins over a rolled one when present, so
+   staff-issued titles can't be clobbered by a player's own roll. */
+var TITLES = [
+  { id:"none",         name:"No Title",       rarity:"starter" },
+  { id:"rookie",       name:"Rookie",         rarity:"common", weight:34 },
+  { id:"sharp-eye",    name:"Sharp Eye",      rarity:"common", weight:34 },
+  { id:"quickflip",    name:"Quickflip",      rarity:"common", weight:28 },
+  { id:"streaker",     name:"Streaker",       rarity:"rare",   weight:16 },
+  { id:"tidewalker",   name:"Tidewalker",     rarity:"rare",   weight:14 },
+  { id:"memorykeeper", name:"Memory Keeper",  rarity:"epic",   weight:6 },
+  { id:"abysswatcher", name:"Abyss Watcher",  rarity:"epic",   weight:4 }
+];
+var TITLE_BY_ID = {};
+TITLES.forEach(function(t){ TITLE_BY_ID[t.id] = t; });
+var ROLLABLE_TITLES = TITLES.filter(function(t){ return t.rarity !== "starter"; });
+
+function rollTitleId(){
+  var totalWeight = ROLLABLE_TITLES.reduce(function(s,t){ return s + t.weight; }, 0);
+  var r = Math.random() * totalWeight;
+  for(var i=0;i<ROLLABLE_TITLES.length;i++){
+    r -= ROLLABLE_TITLES[i].weight;
+    if(r <= 0) return ROLLABLE_TITLES[i].id;
+  }
+  return ROLLABLE_TITLES[ROLLABLE_TITLES.length-1].id;
 }
 
 /* ===================== emotes ===================== */
@@ -943,7 +984,7 @@ var Profile = (function(){
     }catch(e){ return Math.floor(Math.random()*9000)+1000; }
   }
 
-  function def(){ return { avatar:DEFAULT_AVATAR, name:"Player" + nextPlayerNumber(), memos:0, themes:["default"], equippedTheme:"default", emote:"wave", title:"" }; }
+  function def(){ return { avatar:DEFAULT_AVATAR, name:"Player" + nextPlayerNumber(), memos:0, themes:["default"], equippedTheme:"default", titles:["none"], equippedTitle:"none", emote:"wave", title:"" }; }
 
   function load(){
     try{
@@ -952,6 +993,9 @@ var Profile = (function(){
       if(!data.themes || !data.themes.length) data.themes = ["default"];
       if(data.themes.indexOf("default") === -1) data.themes.unshift("default");
       if(!data.equippedTheme) data.equippedTheme = "default";
+      if(!data.titles || !data.titles.length) data.titles = ["none"];
+      if(data.titles.indexOf("none") === -1) data.titles.unshift("none");
+      if(!data.equippedTitle) data.equippedTitle = "none";
       if(!data.emote) data.emote = "wave";
       if(!data.title) data.title = "";
     }catch(e){ data = def(); }
@@ -965,6 +1009,8 @@ var Profile = (function(){
         avatar:data.avatar, name:data.name, memos:data.memos,
         themes: (data.themes && data.themes.length) ? data.themes : ["default"],
         equippedTheme: data.equippedTheme || "default",
+        titles: (data.titles && data.titles.length) ? data.titles : ["none"],
+        equippedTitle: data.equippedTitle || "none",
         emote: data.emote || "wave"
       }).catch(function(){});
     }
@@ -1020,6 +1066,38 @@ var Profile = (function(){
     logLedger(isNew ? "theme_roll_new_" + id : "theme_roll_dupe_" + id, -COST_THEME_ROLL + refund, data.memos);
     return { ok:true, id:id, isNew:isNew, refund:refund };
   }
+
+  function ownsTitle(id){ get(); return data.titles.indexOf(id) !== -1; }
+  function equippedTitle(){ get(); return data.equippedTitle || "none"; }
+  function equipTitle(id){
+    get();
+    if(data.titles.indexOf(id) === -1) return false;
+    data.equippedTitle = id; save(); renderChip();
+    return true;
+  }
+  function rollTitle(){
+    get();
+    if(data.memos < COST_TITLE_ROLL) return { ok:false, reason:"funds" };
+    data.memos -= COST_TITLE_ROLL;
+    var id = rollTitleId();
+    var isNew = data.titles.indexOf(id) === -1;
+    var refund = 0;
+    if(isNew){ data.titles.push(id); }
+    else{ refund = DUPLICATE_TITLE_REFUND; data.memos += refund; }
+    save(); renderChip();
+    logLedger(isNew ? "title_roll_new_" + id : "title_roll_dupe_" + id, -COST_TITLE_ROLL + refund, data.memos);
+    return { ok:true, id:id, isNew:isNew, refund:refund };
+  }
+  // What actually shows next to the player's name: an admin-granted title
+  // (data.title) always wins when present, since that's staff-issued and
+  // shouldn't be silently replaced by the player's own gacha equip. Falls
+  // back to whichever rolled title the player has equipped, or nothing.
+  function displayTitle(){
+    get();
+    if(data.title) return data.title;
+    var t = TITLE_BY_ID[data.equippedTitle];
+    return (t && t.id !== "none") ? t.name : "";
+  }
   function emote(){ get(); return data.emote || "wave"; }
   function setEmote(e){ get(); data.emote = e; save(); }
 
@@ -1067,6 +1145,8 @@ var Profile = (function(){
           avatar: remote.avatar || DEFAULT_AVATAR, name: remote.name || local.name, memos: remote.memos || 0,
           themes: (remote.themes && remote.themes.length) ? remote.themes : (local.themes || ["default"]),
           equippedTheme: remote.equippedTheme || local.equippedTheme || "default",
+          titles: (remote.titles && remote.titles.length) ? remote.titles : (local.titles || ["none"]),
+          equippedTitle: remote.equippedTitle || local.equippedTitle || "none",
           emote: remote.emote || local.emote || "👋",
           title: remote.title || ""
         };
@@ -1078,6 +1158,8 @@ var Profile = (function(){
           memos:  (remote.memos || 0) + (local.memos || 0),
           themes: Array.from(new Set((remote.themes || []).concat(local.themes || ["default"]))),
           equippedTheme: remote.equippedTheme || local.equippedTheme || "default",
+          titles: Array.from(new Set((remote.titles || []).concat(local.titles || ["none"]))),
+          equippedTitle: remote.equippedTitle || local.equippedTitle || "none",
           emote: remote.emote || local.emote || "👋",
           title: remote.title || ""
         };
@@ -1094,6 +1176,8 @@ var Profile = (function(){
           memos:  (local.memos || 0) + SIGNUP_BONUS,
           themes: local.themes || ["default"],
           equippedTheme: local.equippedTheme || "default",
+          titles: local.titles || ["none"],
+          equippedTitle: local.equippedTitle || "none",
           emote: local.emote || "👋",
           title: ""
         };
@@ -1103,7 +1187,7 @@ var Profile = (function(){
       // update(), not set() — this must never clobber admin-only fields
       // (title, banned, banReason) or the ledger subtree that already live
       // on this record.
-      return userRef.update({ avatar:data.avatar, name:data.name, memos:data.memos, email:user.email || null, themes:data.themes, equippedTheme:data.equippedTheme, emote:data.emote });
+      return userRef.update({ avatar:data.avatar, name:data.name, memos:data.memos, email:user.email || null, themes:data.themes, equippedTheme:data.equippedTheme, titles:data.titles, equippedTitle:data.equippedTitle, emote:data.emote });
     }).then(function(){
       save();
       renderChip();
@@ -1238,7 +1322,7 @@ var Profile = (function(){
     get();
     $("chipAvatarImg").src = data.avatar;
     $("chipAvatarImg").style.display = "";
-    $("chipName").innerHTML = escapeHtml(data.name) + (data.title ? ' <span class="title-badge">'+escapeHtml(data.title)+'</span>' : "");
+    $("chipName").innerHTML = escapeHtml(data.name) + (displayTitle() ? ' <span class="title-badge">'+escapeHtml(displayTitle())+'</span>' : "");
     $("chipMemos").textContent = fmtMemos(data.memos);
     var yAva = $("pYouAvatar"), yLbl = $("youLabel");
     if(yAva){ yAva.src = data.avatar; yAva.classList.add("on"); }
@@ -1249,6 +1333,7 @@ var Profile = (function(){
     get:get, load:load, addMemos:addMemos, spend:spend, setAvatar:setAvatar, setName:setName,
     renderChip:renderChip, isSignedIn:isSignedIn, email:email, attachAccount:attachAccount, detachAccount:detachAccount,
     ownsTheme:ownsTheme, equippedTheme:equippedTheme, equipTheme:equipTheme, rollTheme:rollTheme,
+    ownsTitle:ownsTitle, equippedTitle:equippedTitle, equipTitle:equipTitle, rollTitle:rollTitle, displayTitle:displayTitle,
     emote:emote, setEmote:setEmote,
     isAdmin:isAdmin, adminFindByEmail:adminFindByEmail, adminGrantMemos:adminGrantMemos,
     adminSetMemos:adminSetMemos, adminSetTitle:adminSetTitle, adminSetBan:adminSetBan,
@@ -3045,6 +3130,77 @@ document.addEventListener("DOMContentLoaded", function(){
     }, 950);
   });
 
+  /* ===== collection: titles ===== */
+  var RARITY_LABEL_TITLE = { starter:"Starter", common:"Common", rare:"Rare", epic:"Epic" };
+
+  // No color/art per title, so the roll disc just shows the title text
+  // itself, scaled to fit, colored by rarity like the rarity tag is.
+  function titleDiscSVG(title){
+    var rarityColor = { starter:"var(--foam)", common:"var(--text-soft)", rare:"var(--tide)", epic:"var(--sand)" }[title.rarity] || "var(--text-soft)";
+    return '<svg viewBox="0 0 100 100"><g class="disc-body">'+
+      '<circle cx="50" cy="50" r="46" fill="rgba(255,255,255,.04)" stroke="'+rarityColor+'" stroke-opacity=".55" stroke-width="1.4"/>'+
+      '<text x="50" y="54" text-anchor="middle" font-size="9" font-family="inherit" fill="'+rarityColor+'" style="text-transform:uppercase; letter-spacing:.04em">'+
+        escapeHtml(title.name.length > 12 ? title.name.slice(0,11)+"…" : title.name) +
+      '</text></g></svg>';
+  }
+
+  function renderTitleGrid(){
+    var grid = $("titleGrid");
+    grid.innerHTML = "";
+    var equipped = Profile.equippedTitle();
+    TITLES.forEach(function(t){
+      var owned = Profile.ownsTitle(t.id);
+      var card = document.createElement("button");
+      card.className = "theme-card" + (owned ? "" : " locked") + (owned && t.id === equipped ? " equipped" : "");
+      card.innerHTML =
+        (owned && t.id === equipped ? '<span class="theme-equip-tag">EQUIPPED</span>' : "") +
+        '<span class="theme-name" style="font-size:.78rem">'+t.name+'</span>'+
+        '<span class="theme-rarity '+t.rarity+'">'+(owned ? RARITY_LABEL_TITLE[t.rarity] : "Locked")+'</span>';
+      card.addEventListener("click", function(){
+        Sound.init();
+        if(!owned){ Sound.miss(); toast("You haven't rolled this title yet."); return; }
+        Sound.ui();
+        Profile.equipTitle(t.id);
+        renderTitleGrid();
+        toast(t.id === "none" ? "Title cleared." : t.name + " equipped.");
+      });
+      grid.appendChild(card);
+    });
+  }
+
+  $("bRollTitle").addEventListener("click", function(){
+    Sound.init();
+    var p = Profile.get();
+    if(p.memos < COST_TITLE_ROLL){
+      $("rollTitleNote").textContent = "Not enough memos — you need " + COST_TITLE_ROLL + ", you have " + p.memos + ".";
+      Sound.miss();
+      return;
+    }
+    $("bRollTitle").disabled = true;
+    var disc = $("rollTitleDisc");
+    disc.innerHTML = titleDiscSVG(TITLE_BY_ID.none);
+    disc.classList.remove("spin"); void disc.offsetWidth; disc.classList.add("spin");
+    Sound.ui();
+    setTimeout(function(){
+      var result = Profile.rollTitle();
+      $("bRollTitle").disabled = false;
+      if(!result.ok){ $("rollTitleNote").textContent = "Not enough memos."; Sound.miss(); return; }
+      var title = TITLE_BY_ID[result.id];
+      disc.innerHTML = titleDiscSVG(title);
+      $("profBalance") && ($("profBalance").textContent = fmtMemos(Profile.get().memos));
+      if(result.isNew){
+        Sound.hit(6);
+        $("rollTitleNote").textContent = "New title: " + title.name + " (" + RARITY_LABEL_TITLE[title.rarity] + ")!";
+        toast("Rolled " + title.name + " — new title added to your collection.");
+      }else{
+        Sound.ui();
+        $("rollTitleNote").textContent = "Already owned: " + title.name + ". Refunded " + result.refund + " memos.";
+        toast("Duplicate " + title.name + " — refunded " + result.refund + " memos.");
+      }
+      renderTitleGrid();
+    }, 950);
+  });
+
   /* ===== collection: emotes ===== */
   function renderEmoteGrid(){
     var grid = $("emoteGrid");
@@ -3073,13 +3229,15 @@ document.addEventListener("DOMContentLoaded", function(){
     Sound.init(); Sound.ui();
     var tab = b.dataset.tab;
     $("collThemes").classList.toggle("hidden", tab !== "themes");
+    $("collTitles").classList.toggle("hidden", tab !== "titles");
     $("collEmotes").classList.toggle("hidden", tab !== "emotes");
   });
 
   $("bCollection").addEventListener("click", function(){
     Sound.init(); Sound.ui();
-    renderThemeGrid(); renderEmoteGrid();
+    renderThemeGrid(); renderTitleGrid(); renderEmoteGrid();
     $("rollDisc").innerHTML = themeDiscSVG(THEME_BY_ID[Profile.equippedTheme()] || THEME_BY_ID.default);
+    $("rollTitleDisc").innerHTML = titleDiscSVG(TITLE_BY_ID[Profile.equippedTitle()] || TITLE_BY_ID.none);
     show("collection");
   });
   $("bCollectionBack").addEventListener("click", function(){ Sound.init(); show("menu"); });
@@ -3149,6 +3307,14 @@ document.addEventListener("DOMContentLoaded", function(){
     return '<img class="lb-avatar" src="'+(r.avatar||DEFAULT_AVATAR)+'" alt="">';
   }
 
+  // Admin title always wins for a row's badge; otherwise fall back to
+  // whichever title that player has rolled and equipped for themselves.
+  function lbRowTitle(r){
+    if(r.title) return r.title;
+    var t = TITLE_BY_ID[r.equippedTitle];
+    return (t && t.id !== "none") ? t.name : "";
+  }
+
   function renderLeaderboardRows(rows){
     var list = $("lbList");
     list.innerHTML = "";
@@ -3160,11 +3326,12 @@ document.addEventListener("DOMContentLoaded", function(){
     rows.forEach(function(r, idx){
       var row = document.createElement("div");
       row.className = "lb-row" + (myUid && r.email === myUid ? " me" : "");
+      var badgeTitle = lbRowTitle(r);
       row.innerHTML =
         '<span class="lb-rank'+(idx<3 ? " top" : "")+'">'+(idx+1)+'</span>'+
         lbAvatarHTML(r)+
         '<span class="lb-name"><span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+escapeHtml(r.name||"Diver")+'</span>'+
-          (r.title ? '<span class="title-badge">'+escapeHtml(r.title)+'</span>' : "")+'</span>'+
+          (badgeTitle ? '<span class="title-badge">'+escapeHtml(badgeTitle)+'</span>' : "")+'</span>'+
         '<span class="lb-memos"><img src="https://iili.io/noXdxMG.png" alt="" class="memos-icon">'+fmtMemos(r.memos||0)+'</span>';
       list.appendChild(row);
     });
