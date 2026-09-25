@@ -249,6 +249,14 @@ button:focus-visible{ outline:2px solid var(--foam); outline-offset:4px; }
 .toast.show{ opacity:1; transform:translateX(-50%) translateY(0); }
 .toast.warn{ color:var(--coral); border-color:rgba(224,138,138,.4); }
 
+.banned-overlay{ position:fixed; inset:0; z-index:999; background:var(--abyss); display:flex; align-items:center; justify-content:center; padding:24px; animation:fade .3s ease; }
+.banned-card{ display:flex; flex-direction:column; align-items:center; text-align:center; max-width:420px; }
+.banned-icon{ width:88px; height:88px; margin-bottom:28px; filter:drop-shadow(0 0 24px rgba(224,138,138,.35)); }
+.banned-icon svg{ width:100%; height:100%; display:block; }
+.banned-title{ font-weight:500; letter-spacing:.14em; text-transform:uppercase; font-size:clamp(1.3rem,5vw,1.7rem); color:var(--coral); margin:0; }
+.banned-reason{ margin:18px 0 0; color:var(--text-soft); font-size:.98rem; line-height:1.6; word-break:break-word; }
+.banned-reason .label{ color:var(--text-dim); letter-spacing:.08em; text-transform:uppercase; font-size:.72rem; display:block; margin-bottom:6px; }
+
 .foot-note{ margin-top:38px; color:var(--text-dim); font-size:.76rem; opacity:.6; letter-spacing:.05em; text-align:center; }
 
 @media (max-width:420px){
@@ -719,6 +727,16 @@ button:focus-visible{ outline:2px solid var(--foam); outline-offset:4px; }
 
 <div class="toast" id="toast"></div>
 
+<div class="banned-overlay hidden" id="bannedOverlay" role="alertdialog" aria-modal="true" aria-labelledby="bannedTitle">
+  <div class="banned-card">
+    <div class="banned-icon">
+      <svg viewBox="0 0 24 24" id="_24x24_On_Light_User" data-name="24x24/On Light/User" xmlns="http://www.w3.org/2000/svg" fill="#000000"><g id="SVGRepo_bgCarrier" stroke-width="0"></g><g id="SVGRepo_tracerCarrier" stroke-linecap="round" stroke-linejoin="round"></g><g id="SVGRepo_iconCarrier"> <rect id="view-box" width="24" height="24" fill="none"></rect> <path id="Shape" d="M0,9.75A9.75,9.75,0,1,1,9.75,19.5,9.761,9.761,0,0,1,0,9.75ZM9.75,18a8.218,8.218,0,0,0,5.515-2.119,4.328,4.328,0,0,0-1.421-.75c-.112-.04-.229-.081-.377-.13l-.386-.13c-1.4-.471-2.023-.851-2.293-1.742a1.876,1.876,0,0,1-.055-.223,2.369,2.369,0,0,1,.138-1.4,2.123,2.123,0,0,1,.589-.795,2.823,2.823,0,0,0,1.042-2.3A2.832,2.832,0,0,0,9.75,5.5,2.8,2.8,0,0,0,7,8.417a2.843,2.843,0,0,0,1,2.274,2.278,2.278,0,0,1,.571.695,2.224,2.224,0,0,1,.2,1.537,1.152,1.152,0,0,1-.045.17c-.237.877-.847,1.254-2.188,1.712l-.445.15c-.173.059-.308.106-.437.154a4.312,4.312,0,0,0-1.419.771A8.216,8.216,0,0,0,9.75,18ZM14,8.417a4.32,4.32,0,0,1-1.559,3.427.672.672,0,0,0-.193.255.928.928,0,0,0-.043.527c.006.031.01.046.013.055.077.253.408.454,1.342.769l.384.129c.157.053.284.1.408.141a5.645,5.645,0,0,1,1.935,1.058,8.25,8.25,0,1,0-13.074,0A5.672,5.672,0,0,1,5.135,13.7c.144-.053.291-.1.475-.167l.443-.149c.863-.3,1.17-.484,1.244-.747,0,.006,0-.005.007-.033a.769.769,0,0,0-.058-.519.9.9,0,0,0-.237-.271A4.346,4.346,0,0,1,5.5,8.417,4.3,4.3,0,0,1,9.75,4,4.332,4.332,0,0,1,14,8.417Z" transform="translate(2.25 2.25)" fill="var(--text-soft)"></path> <path id="Shape-2" data-name="Shape" d="M2.626.657.006,21.551a.75.75,0,0,0,1.488.187L4.115.843A.75.75,0,0,0,2.626.657Z" transform="translate(2.458 5.527) rotate(-45)" fill="var(--coral)"></path> </g></svg>
+    </div>
+    <h1 class="banned-title" id="bannedTitle">You Got Banned</h1>
+    <p class="banned-reason"><span class="label">Reason</span><span id="bannedReasonText">No reason given.</span></p>
+  </div>
+</div>
+
 <script>
 /* =======================================================================
    FIREBASE CONFIG — paste your own project's values here.
@@ -847,6 +865,27 @@ var Profile = (function(){
   var counterKey = "farPlayerNum";
   var authUser = null;   // firebase.User when signed in, else null
   var userRef = null;    // db.ref("users/"+uid) when signed in
+  var banWatchRef = null; // the userRef currently being watched for a live ban
+  var bannedCallback = null; // registered via onBanned(); fired the instant an admin bans this account
+
+  function onBanned(cb){ bannedCallback = cb; }
+
+  // Live ban enforcement: once signed in, keep listening on this account's
+  // record so a ban applied *while someone is mid-session* (not just at the
+  // next sign-in) kicks them out immediately instead of waiting for a reload.
+  function handleBanSnapshot(snap){
+    var v = snap.val();
+    if(v && v.banned && bannedCallback) bannedCallback(v.banReason || "");
+  }
+  function watchBan(){
+    unwatchBan();
+    if(!userRef) return;
+    banWatchRef = userRef;
+    banWatchRef.on("value", handleBanSnapshot);
+  }
+  function unwatchBan(){
+    if(banWatchRef){ banWatchRef.off("value", handleBanSnapshot); banWatchRef = null; }
+  }
 
   function nextPlayerNumber(){
     try{
@@ -1014,9 +1053,11 @@ var Profile = (function(){
     }).then(function(){
       save();
       renderChip();
+      watchBan();
       if(mergeLogged !== null) logLedger("account_merge_local_carryover", mergeLogged, data.memos);
       if(signupBonusLogged !== null) logLedger("signup_bonus", signupBonusLogged, data.memos);
     }).catch(function(e){
+      unwatchBan();
       userRef = null; authUser = null;
       if(!e || !e.banned) console.error("Account sync failed:", e);
       throw e;
@@ -1024,6 +1065,7 @@ var Profile = (function(){
   }
 
   function detachAccount(){
+    unwatchBan();
     authUser = null; userRef = null;
     load(); renderChip();
   }
@@ -1152,7 +1194,8 @@ var Profile = (function(){
     ownsTheme:ownsTheme, equippedTheme:equippedTheme, equipTheme:equipTheme, rollTheme:rollTheme,
     emote:emote, setEmote:setEmote,
     isAdmin:isAdmin, adminFindByEmail:adminFindByEmail, adminGrantMemos:adminGrantMemos,
-    adminSetMemos:adminSetMemos, adminSetTitle:adminSetTitle, adminSetBan:adminSetBan
+    adminSetMemos:adminSetMemos, adminSetTitle:adminSetTitle, adminSetBan:adminSetBan,
+    onBanned:onBanned
   };
 })();
 
@@ -1165,6 +1208,13 @@ var aiMap = new Map();
 var timers = [];
 
 var db = null, auth = null, googleProvider = null, fbReady = false, started = false;
+
+// Fires the instant this account is banned — whether that happens at
+// sign-in, on reload, or live while the player is mid-game/mid-room.
+Profile.onBanned(function(reason){
+  if(auth) auth.signOut();
+  showBannedScreen(reason);
+});
 var room = { code:null, role:null, ref:null, seenMove:0, seenResult:0, rematchMine:false, bots:{}, botMoving:false, lastData:null };
 var pendingRoomSize = 2;
 var onEmoteReceived = function(d){}; // wired up in DOMContentLoaded, called from onRoom
@@ -1705,7 +1755,7 @@ function initFirebase(){
             // Covers a banned account resuming an already-signed-in session
             // (e.g. reloading the page) — attachAccount already cleared
             // Profile's local state, this just also ends the auth session.
-            if(e && e.banned){ if(auth) auth.signOut(); toast(e.message); }
+            if(e && e.banned){ if(auth) auth.signOut(); showBannedScreen(e.banReason); }
             $("bAdmin").classList.add("hidden");
           });
         }else{
@@ -2312,8 +2362,27 @@ function petals(){
   }
 }
 
+/* ===================== ban lockout ===================== */
+// Once this fires, the player is done — no more moves, no more menus, no
+// way back in. Kills any running game/room state first so nothing keeps
+// writing to Firebase in the background, then covers the whole screen.
+var banLockdown = false;
+function showBannedScreen(reason){
+  if(banLockdown) return; // already locked out, don't re-render on top of itself
+  banLockdown = true;
+  clearTimers();
+  over = true; started = false;
+  if(typeof room !== "undefined" && room && room.ref) detachRoom();
+  $("bannedReasonText").textContent = reason ? reason : "No reason given.";
+  $("app").classList.add("hidden");
+  $("toast").classList.remove("show");
+  $("bannedOverlay").classList.remove("hidden");
+  document.body.style.overflow = "hidden";
+}
+
 /* ===================== screens ===================== */
 function show(name){
+  if(banLockdown) return; // banned players don't get to navigate anywhere else
   $("s-menu").classList.toggle("hidden", name!=="menu");
   $("s-roomsettings").classList.toggle("hidden", name!=="roomsettings");
   $("s-profile").classList.toggle("hidden", name!=="profile");
@@ -2511,7 +2580,7 @@ document.addEventListener("DOMContentLoaded", function(){
   // only cleared Profile's local references) so the person can't stay
   // signed in with a banned account.
   function handleAuthError(e){
-    if(e && e.banned && auth) auth.signOut();
+    if(e && e.banned){ if(auth) auth.signOut(); showBannedScreen(e.banReason); return; }
     $("acctNote").textContent = authErrorMessage(e);
   }
 
