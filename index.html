@@ -864,20 +864,34 @@ var Profile = (function(){
   var data = null;
   var counterKey = "farPlayerNum";
   var authUser = null;   // firebase.User when signed in, else null
-  var userRef = null;    // db.ref("users/"+uid) when signed in
-  var banWatchRef = null; // the userRef currently being watched for live account changes
-  var bannedCallback = null; // registered via onBanned(); fired the instant an admin bans this account
+  var userRef = null;    // db.ref("users/"+uid) when signed in and not banned
+  var banWatchRef = null; // watches userRef for live account changes once properly attached
+  var recoveryRef = null; // watches users/{uid}/banned while locked out, waiting for an unban
+  var lockedOut = false; // true from the moment a ban is seen until it's lifted
+  var bannedCallback = null;   // registered via onBanned(); fired the instant this account is banned
+  var unbannedCallback = null; // registered via onUnbanned(); fired once the ban is lifted
 
   function onBanned(cb){ bannedCallback = cb; }
+  function onUnbanned(cb){ unbannedCallback = cb; }
 
   // Live sync: once signed in, keep listening on this account's own record so
   // anything an admin does to it from another device — ban, memo grant, title
-  // — lands immediately here instead of waiting for a reload. A ban ends the
-  // session outright; memos/title are merged into local state in place.
+  // — lands immediately here instead of waiting for a reload.
   function handleAccountSnapshot(snap){
     var v = snap.val();
     if(!v) return;
-    if(v.banned){ if(bannedCallback) bannedCallback(v.banReason || ""); return; }
+    if(v.banned){
+      if(!lockedOut){ lockedOut = true; if(bannedCallback) bannedCallback(v.banReason || ""); }
+      return;
+    }
+    if(lockedOut){
+      // Banned while already attached and playing, now lifted — the account
+      // was never fully detached for this path, so there's nothing to
+      // re-merge, just drop the lockout and let the caller resume.
+      lockedOut = false;
+      if(unbannedCallback) unbannedCallback();
+      return;
+    }
     if(!data) return;
     var changed = false;
     if(typeof v.memos === "number" && v.memos !== data.memos){ data.memos = v.memos; changed = true; }
@@ -896,6 +910,27 @@ var Profile = (function(){
   }
   function unwatchBan(){
     if(banWatchRef){ banWatchRef.off("value", handleAccountSnapshot); banWatchRef = null; }
+  }
+
+  // Used only for the "banned before we ever attached" case — sign-in or a
+  // page reload while already banned. The Firebase Auth session is left
+  // alone (no signOut()), so the moment an admin lifts the ban this watcher
+  // sees it and quietly re-runs attachAccount for the same user object,
+  // letting the person keep playing without typing their credentials again.
+  function watchForUnban(user){
+    stopRecoveryWatch();
+    recoveryRef = db.ref("users/" + user.uid + "/banned");
+    recoveryRef.on("value", function(snap){
+      if(snap.val()) return; // still banned
+      stopRecoveryWatch();
+      lockedOut = false;
+      attachAccount(user).then(function(){
+        if(unbannedCallback) unbannedCallback();
+      });
+    });
+  }
+  function stopRecoveryWatch(){
+    if(recoveryRef){ recoveryRef.off("value"); recoveryRef = null; }
   }
 
   function nextPlayerNumber(){
@@ -997,7 +1032,8 @@ var Profile = (function(){
   // remote value as-is instead of adding to it.
   function attachAccount(user){
     authUser = user;
-    if(!user){ userRef = null; renderChip(); return Promise.resolve(); }
+    if(!user){ stopRecoveryWatch(); lockedOut = false; userRef = null; renderChip(); return Promise.resolve(); }
+    stopRecoveryWatch();
     userRef = db.ref("users/" + user.uid);
     var local = get();
     var alreadyLinked = (function(){ try{ return localStorage.getItem(LINK_KEY) === user.uid; }catch(e){ return false; } })();
@@ -1008,8 +1044,13 @@ var Profile = (function(){
 
       // Banned accounts never get attached — bail out before touching any
       // local/remote state so a banned player can't keep playing signed in.
+      // The Firebase Auth session itself is left alone (nothing here calls
+      // signOut()), and watchForUnban() picks up the moment the ban is
+      // lifted so they don't have to sign back in once it is.
       if(remote && remote.banned){
         userRef = null; authUser = null;
+        lockedOut = true;
+        watchForUnban(user);
         var banErr = new Error(remote.banReason ? ("You've been banned: " + remote.banReason) : "You've been banned from this account.");
         banErr.banned = true; banErr.banReason = remote.banReason || "";
         throw banErr;
@@ -1064,6 +1105,7 @@ var Profile = (function(){
     }).then(function(){
       save();
       renderChip();
+      lockedOut = false;
       watchBan();
       if(mergeLogged !== null) logLedger("account_merge_local_carryover", mergeLogged, data.memos);
       if(signupBonusLogged !== null) logLedger("signup_bonus", signupBonusLogged, data.memos);
@@ -1077,6 +1119,8 @@ var Profile = (function(){
 
   function detachAccount(){
     unwatchBan();
+    stopRecoveryWatch();
+    lockedOut = false;
     authUser = null; userRef = null;
     load(); renderChip();
   }
@@ -1206,7 +1250,7 @@ var Profile = (function(){
     emote:emote, setEmote:setEmote,
     isAdmin:isAdmin, adminFindByEmail:adminFindByEmail, adminGrantMemos:adminGrantMemos,
     adminSetMemos:adminSetMemos, adminSetTitle:adminSetTitle, adminSetBan:adminSetBan,
-    onBanned:onBanned
+    onBanned:onBanned, onUnbanned:onUnbanned
   };
 })();
 
@@ -1221,10 +1265,15 @@ var timers = [];
 var db = null, auth = null, googleProvider = null, fbReady = false, started = false;
 
 // Fires the instant this account is banned — whether that happens at
-// sign-in, on reload, or live while the player is mid-game/mid-room.
+// sign-in, on reload, or live while the player is mid-game/mid-room. The
+// Firebase Auth session is deliberately left alone here: signing out would
+// be what forces a fresh login later, and an unban should just let them
+// keep going without that.
 Profile.onBanned(function(reason){
-  if(auth) auth.signOut();
   showBannedScreen(reason);
+});
+Profile.onUnbanned(function(){
+  hideBannedScreen();
 });
 var room = { code:null, role:null, ref:null, seenMove:0, seenResult:0, rematchMine:false, bots:{}, botMoving:false, lastData:null };
 var pendingRoomSize = 2;
@@ -1773,9 +1822,11 @@ function initFirebase(){
             }
           }).catch(function(e){
             // Covers a banned account resuming an already-signed-in session
-            // (e.g. reloading the page) — attachAccount already cleared
-            // Profile's local state, this just also ends the auth session.
-            if(e && e.banned){ if(auth) auth.signOut(); showBannedScreen(e.banReason); }
+            // (e.g. reloading the page). Auth stays signed in on purpose —
+            // Profile.watchForUnban() is already listening in the
+            // background, so the overlay clears itself the moment an admin
+            // lifts the ban, no fresh login required.
+            if(e && e.banned){ showBannedScreen(e.banReason); }
             $("bAdmin").classList.add("hidden");
           });
         }else{
@@ -2400,6 +2451,21 @@ function showBannedScreen(reason){
   document.body.style.overflow = "hidden";
 }
 
+// The reverse: an admin lifted the ban. Profile already re-synced the
+// account in the background (or was never fully detached, if the ban hit
+// mid-session), so this is just restoring the UI — drop back to the menu
+// rather than resuming whatever screen/game state existed before the ban.
+function hideBannedScreen(){
+  if(!banLockdown) return;
+  banLockdown = false;
+  $("bannedOverlay").classList.add("hidden");
+  $("app").classList.remove("hidden");
+  document.body.style.overflow = "";
+  Profile.renderChip();
+  show("menu");
+  toast("Welcome back — you're unbanned.");
+}
+
 /* ===================== screens ===================== */
 function show(name){
   if(banLockdown) return; // banned players don't get to navigate anywhere else
@@ -2595,12 +2661,12 @@ document.addEventListener("DOMContentLoaded", function(){
     }
   }
 
-  // If Profile.attachAccount rejected because the account is banned, make
-  // sure the Firebase Auth session itself is also torn down (attachAccount
-  // only cleared Profile's local references) so the person can't stay
-  // signed in with a banned account.
+  // If Profile.attachAccount rejected because the account is banned, show
+  // the lockout screen. Auth stays signed in — Profile is already watching
+  // in the background for the ban to lift, at which point the overlay
+  // clears itself without asking them to sign in again.
   function handleAuthError(e){
-    if(e && e.banned){ if(auth) auth.signOut(); showBannedScreen(e.banReason); return; }
+    if(e && e.banned){ showBannedScreen(e.banReason); return; }
     $("acctNote").textContent = authErrorMessage(e);
   }
 
