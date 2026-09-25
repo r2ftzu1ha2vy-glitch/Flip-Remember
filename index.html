@@ -1605,15 +1605,18 @@ var Sound = (function(){
 
     ui: function(){ noise({ freq:jitter(2200,90), dur:.04, vol:.05, q:2 }); },
 
-    /* turning a disc — a wooden tap with an airy swish over it, lightly
-       humanized so repeated flips in a row don't sound like a metronome */
+    /* picking up a disc — a bright glassy pluck with a little bubble-pop
+       on top, fitting the underwater theme better than the old wood-tap.
+       Lightly humanized so repeated picks in a row don't sound identical. */
     flip: function(){
-      noise({ freq:jitter(1100,60), sweepTo:2400, dur:.09, vol:.13, q:1.1 });
-      voice({ freq:jitter(320,10), glide:520, type:"triangle", dur:.14, vol:.05, cutoff:1600 });
+      voice({ freq:jitter(700,20), glide:jitter(560,15), type:"sine", dur:.13, vol:.1, attack:.004, cutoff:3400 });
+      voice({ freq:jitter(1400,40), type:"triangle", dur:.09, vol:.03, attack:.005, delay:.01, cutoff:4200 });
+      noise({ freq:jitter(3000,150), sweepTo:1100, dur:.05, vol:.045, q:2.4 });
     },
     flipFoe: function(){
-      noise({ freq:jitter(800,50), sweepTo:1600, dur:.09, vol:.09, q:1.1 });
-      voice({ freq:jitter(240,8), glide:380, type:"triangle", dur:.14, vol:.04, cutoff:1200 });
+      voice({ freq:jitter(520,16), glide:jitter(420,12), type:"sine", dur:.13, vol:.07, attack:.004, cutoff:2600 });
+      voice({ freq:jitter(1040,32), type:"triangle", dur:.09, vol:.02, attack:.005, delay:.01, cutoff:3200 });
+      noise({ freq:jitter(2200,120), sweepTo:850, dur:.05, vol:.032, q:2.2 });
     },
 
     /* correct — the note climbs the scale with your streak */
@@ -2690,11 +2693,13 @@ function hideBannedScreen(){
 
 /* ===================== menu music ===================== */
 // Music now plays continuously across the whole app — it only ever fades
-// between a "full" volume (menu / lobby / any non-match screen) and a
-// "ducked" volume (mid-match), rather than hard-stopping. This keeps a
-// single <audio> element playing gaplessly instead of restarting it.
+// between a "full" volume (menu / lobby / any non-match screen) and
+// silence (mid-match, faded all the way out like a mute rather than just
+// ducked), rather than hard-stopping. This keeps a single <audio> element
+// playing gaplessly instead of restarting it, and pauses it outright once
+// a fade-to-silence finishes so it isn't decoding audio nobody can hear.
 var menuMusicEl = null;
-var MUSIC_FULL = .5, MUSIC_DUCKED = .12, MUSIC_FADE_MS = 900, MUSIC_FADE_STEP = 40;
+var MUSIC_FULL = .5, MUSIC_MATCH = 0, MUSIC_FADE_MS = 900, MUSIC_FADE_STEP = 40;
 var musicFadeTimer = null;
 function menuMusic(){ return menuMusicEl || (menuMusicEl = $("menuMusic")); }
 function fadeMusicTo(target){
@@ -2715,11 +2720,12 @@ function fadeMusicTo(target){
       el.volume = target;
       clearInterval(musicFadeTimer);
       musicFadeTimer = null;
+      if(target <= 0) el.pause();
     }
   }, MUSIC_FADE_STEP);
 }
 function playMenuMusic(){ fadeMusicTo(MUSIC_FULL); }
-function duckMenuMusic(){ fadeMusicTo(MUSIC_DUCKED); }
+function duckMenuMusic(){ fadeMusicTo(MUSIC_MATCH); }
 function pauseMenuMusic(){
   if(musicFadeTimer){ clearInterval(musicFadeTimer); musicFadeTimer = null; }
   var el = menuMusic();
