@@ -324,6 +324,7 @@ button:focus-visible{ outline:2px solid var(--foam); outline-offset:4px; }
 .lb-avatar{ width:32px; height:32px; border-radius:50%; object-fit:cover; flex:0 0 auto; background:var(--slate); }
 .lb-name{ flex:1; font-size:.88rem; color:var(--text-soft); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 .lb-memos{ display:flex; align-items:center; gap:5px; font-size:.85rem; color:var(--sand); flex:0 0 auto; }
+.lb-stat{ display:flex; align-items:center; gap:5px; font-size:.85rem; color:var(--foam); flex:0 0 auto; }
 
 .admin-row{ cursor:pointer; transition:background .2s ease, border-color .2s ease; }
 .admin-row:hover{ background:rgba(255,255,255,.06); border-color:var(--line-strong); }
@@ -539,6 +540,18 @@ button:focus-visible{ outline:2px solid var(--foam); outline-offset:4px; }
     </div>
 
     <div class="profile-card profile-section">
+      <span class="block-title">YOUR RECORD</span>
+      <div class="end-stats" style="margin-top:0; flex-wrap:wrap; justify-content:center">
+        <div class="stat"><span class="stat-k">WINS</span><span class="stat-v" id="profWins">0</span></div>
+        <div class="stat"><span class="stat-k">LOSSES</span><span class="stat-v" id="profLosses">0</span></div>
+        <div class="stat"><span class="stat-k">WIN RATE</span><span class="stat-v" id="profWinRate">—</span></div>
+        <div class="stat"><span class="stat-k">STREAK</span><span class="stat-v" id="profStreak">0</span></div>
+        <div class="stat"><span class="stat-k">BEST STREAK</span><span class="stat-v" id="profBestStreak">0</span></div>
+      </div>
+      <span class="note" id="profMatchesNote" style="margin-top:2px">0 matches played</span>
+    </div>
+
+    <div class="profile-card profile-section">
       <span class="block-title">PROFILE PICTURE</span>
       <div class="ava-current" id="avaCurrent"><img id="avaCurrentImg" src="" alt="" style="display:none"></div>
       <input type="file" id="avaFileInput" accept="image/png,image/jpeg,image/webp,image/gif" style="display:none">
@@ -656,7 +669,9 @@ button:focus-visible{ outline:2px solid var(--foam); outline-offset:4px; }
         <div class="stat"><span class="stat-k">YOU</span><span class="stat-v" id="statYou">15 / 15</span></div>
         <div class="stat"><span class="stat-k" id="statFoeK">AI</span><span class="stat-v" id="statFoe">8 / 15</span></div>
         <div class="stat"><span class="stat-k">FLIPS</span><span class="stat-v" id="statFlips">0</span></div>
+        <div class="stat"><span class="stat-k">STREAK</span><span class="stat-v" id="statStreak">0</span></div>
       </div>
+      <p class="note hidden" id="streakNote" style="margin-top:14px"></p>
       <div class="btn-row">
         <button class="btn btn-primary" id="bAgain">Play again</button>
         <button class="btn btn-ghost" id="bMenu">Main menu</button>
@@ -709,6 +724,11 @@ button:focus-visible{ outline:2px solid var(--foam); outline-offset:4px; }
     <div style="margin-top:7vh"></div>
     <h2 style="font-weight:200; letter-spacing:.2em; font-size:1.3rem; margin:0">LEADERBOARD</h2>
     <p class="note" style="margin-top:8px" id="lbSub">Ranked by memos earned. Signed-in players only.</p>
+    <div class="tab-seg" id="lbTabSeg" role="group" aria-label="Leaderboard sort">
+      <button data-sort="memos" class="active">Memos</button>
+      <button data-sort="wins">Wins</button>
+      <button data-sort="bestStreak">Best streak</button>
+    </div>
     <div class="lb-list" id="lbList"></div>
     <div class="btn-row" style="margin-top:36px; margin-bottom:20px">
       <button class="btn btn-ghost" id="bLeaderboardBack">Back</button>
@@ -940,6 +960,11 @@ var Profile = (function(){
     if(typeof v.memos === "number" && v.memos !== data.memos){ data.memos = v.memos; changed = true; }
     var incomingTitle = v.title || "";
     if(incomingTitle !== (data.title || "")){ data.title = incomingTitle; changed = true; }
+    if(typeof v.wins === "number" && v.wins !== data.wins){ data.wins = v.wins; changed = true; }
+    if(typeof v.losses === "number" && v.losses !== data.losses){ data.losses = v.losses; changed = true; }
+    if(typeof v.matchesPlayed === "number" && v.matchesPlayed !== data.matchesPlayed){ data.matchesPlayed = v.matchesPlayed; changed = true; }
+    if(typeof v.streak === "number" && v.streak !== data.streak){ data.streak = v.streak; changed = true; }
+    if(typeof v.bestStreak === "number" && v.bestStreak !== data.bestStreak){ data.bestStreak = v.bestStreak; changed = true; }
     if(changed){
       try{ localStorage.setItem(KEY, JSON.stringify(data)); }catch(e){}
       renderChip();
@@ -984,7 +1009,8 @@ var Profile = (function(){
     }catch(e){ return Math.floor(Math.random()*9000)+1000; }
   }
 
-  function def(){ return { avatar:DEFAULT_AVATAR, name:"Player" + nextPlayerNumber(), memos:0, themes:["default"], equippedTheme:"default", titles:["none"], equippedTitle:"none", emote:"wave", title:"" }; }
+  function def(){ return { avatar:DEFAULT_AVATAR, name:"Player" + nextPlayerNumber(), memos:0, themes:["default"], equippedTheme:"default", titles:["none"], equippedTitle:"none", emote:"wave", title:"",
+    wins:0, losses:0, matchesPlayed:0, streak:0, bestStreak:0 }; }
 
   function load(){
     try{
@@ -998,6 +1024,11 @@ var Profile = (function(){
       if(!data.equippedTitle) data.equippedTitle = "none";
       if(!data.emote) data.emote = "wave";
       if(!data.title) data.title = "";
+      data.wins = Number(data.wins) || 0;
+      data.losses = Number(data.losses) || 0;
+      data.matchesPlayed = Number(data.matchesPlayed) || 0;
+      data.streak = Number(data.streak) || 0;
+      data.bestStreak = Number(data.bestStreak) || 0;
     }catch(e){ data = def(); }
     return data;
   }
@@ -1011,7 +1042,9 @@ var Profile = (function(){
         equippedTheme: data.equippedTheme || "default",
         titles: (data.titles && data.titles.length) ? data.titles : ["none"],
         equippedTitle: data.equippedTitle || "none",
-        emote: data.emote || "wave"
+        emote: data.emote || "wave",
+        wins: data.wins || 0, losses: data.losses || 0, matchesPlayed: data.matchesPlayed || 0,
+        streak: data.streak || 0, bestStreak: data.bestStreak || 0
       }).catch(function(){});
     }
   }
@@ -1041,6 +1074,28 @@ var Profile = (function(){
     logLedger(reason || "spend", -n, data.memos);
     return true;
   }
+
+  // Records the outcome of one completed match against the lifetime record:
+  // wins/losses, matches played, and the current win streak (reset to 0 on
+  // any loss). bestStreak only ever grows. Returns the updated stat block
+  // plus whether this result just set a new personal-best streak, so the
+  // caller can decide whether to celebrate it.
+  function recordMatchResult(won){
+    get();
+    data.matchesPlayed = (data.matchesPlayed || 0) + 1;
+    var isNewBest = false;
+    if(won){
+      data.wins = (data.wins || 0) + 1;
+      data.streak = (data.streak || 0) + 1;
+      if(data.streak > (data.bestStreak || 0)){ data.bestStreak = data.streak; isNewBest = data.streak > 1; }
+    }else{
+      data.losses = (data.losses || 0) + 1;
+      data.streak = 0;
+    }
+    save(); renderChip();
+    return { wins:data.wins, losses:data.losses, matchesPlayed:data.matchesPlayed, streak:data.streak, bestStreak:data.bestStreak, isNewBest:isNewBest };
+  }
+  function stats(){ get(); return { wins:data.wins||0, losses:data.losses||0, matchesPlayed:data.matchesPlayed||0, streak:data.streak||0, bestStreak:data.bestStreak||0 }; }
 
   function setAvatar(a){ get(); data.avatar = a; save(); renderChip(); }
   function setName(n){ get(); data.name = n; save(); renderChip(); }
@@ -1148,7 +1203,9 @@ var Profile = (function(){
           titles: (remote.titles && remote.titles.length) ? remote.titles : (local.titles || ["none"]),
           equippedTitle: remote.equippedTitle || local.equippedTitle || "none",
           emote: remote.emote || local.emote || "👋",
-          title: remote.title || ""
+          title: remote.title || "",
+          wins: remote.wins || 0, losses: remote.losses || 0, matchesPlayed: remote.matchesPlayed || 0,
+          streak: remote.streak || 0, bestStreak: remote.bestStreak || 0
         };
       }else if(remote){
         // First time this device has linked to this account: genuine one-time merge.
@@ -1161,7 +1218,12 @@ var Profile = (function(){
           titles: Array.from(new Set((remote.titles || []).concat(local.titles || ["none"]))),
           equippedTitle: remote.equippedTitle || local.equippedTitle || "none",
           emote: remote.emote || local.emote || "👋",
-          title: remote.title || ""
+          title: remote.title || "",
+          wins: (remote.wins || 0) + (local.wins || 0),
+          losses: (remote.losses || 0) + (local.losses || 0),
+          matchesPlayed: (remote.matchesPlayed || 0) + (local.matchesPlayed || 0),
+          streak: remote.streak || local.streak || 0,
+          bestStreak: Math.max(remote.bestStreak || 0, local.bestStreak || 0)
         };
         mergeLogged = local.memos || 0;
       }else{
@@ -1179,7 +1241,9 @@ var Profile = (function(){
           titles: local.titles || ["none"],
           equippedTitle: local.equippedTitle || "none",
           emote: local.emote || "👋",
-          title: ""
+          title: "",
+          wins: local.wins || 0, losses: local.losses || 0, matchesPlayed: local.matchesPlayed || 0,
+          streak: local.streak || 0, bestStreak: local.bestStreak || 0
         };
         signupBonusLogged = SIGNUP_BONUS;
       }
@@ -1187,7 +1251,8 @@ var Profile = (function(){
       // update(), not set() — this must never clobber admin-only fields
       // (title, banned, banReason) or the ledger subtree that already live
       // on this record.
-      return userRef.update({ avatar:data.avatar, name:data.name, memos:data.memos, email:user.email || null, themes:data.themes, equippedTheme:data.equippedTheme, titles:data.titles, equippedTitle:data.equippedTitle, emote:data.emote });
+      return userRef.update({ avatar:data.avatar, name:data.name, memos:data.memos, email:user.email || null, themes:data.themes, equippedTheme:data.equippedTheme, titles:data.titles, equippedTitle:data.equippedTitle, emote:data.emote,
+        wins:data.wins, losses:data.losses, matchesPlayed:data.matchesPlayed, streak:data.streak, bestStreak:data.bestStreak });
     }).then(function(){
       save();
       renderChip();
@@ -1334,7 +1399,7 @@ var Profile = (function(){
     renderChip:renderChip, isSignedIn:isSignedIn, email:email, attachAccount:attachAccount, detachAccount:detachAccount,
     ownsTheme:ownsTheme, equippedTheme:equippedTheme, equipTheme:equipTheme, rollTheme:rollTheme,
     ownsTitle:ownsTitle, equippedTitle:equippedTitle, equipTitle:equipTitle, rollTitle:rollTitle, displayTitle:displayTitle,
-    emote:emote, setEmote:setEmote,
+    emote:emote, setEmote:setEmote, recordMatchResult:recordMatchResult, stats:stats,
     isAdmin:isAdmin, adminFindByEmail:adminFindByEmail, adminGrantMemos:adminGrantMemos,
     adminSetMemos:adminSetMemos, adminSetTitle:adminSetTitle, adminSetBan:adminSetBan,
     onBanned:onBanned, onUnbanned:onUnbanned
@@ -1420,6 +1485,12 @@ var boardEl, msgEl, objNum, objective;
    ======================================================================= */
 var Sound = (function(){
   var ctx = null, master = null, dry = null, wet = null, verb = null, ready = false, on = true;
+  var muteTimer = null;
+
+  // Small random jitter helper — used to humanize repeated sounds (flips,
+  // taps) so dozens of identical taps in a row don't sound mechanically
+  // exact. Keeps the character of the sound, just breathes a little.
+  function jitter(base, amount){ return base + (Math.random()*2-1) * amount; }
 
   var SCALE = [
     130.81,155.56,174.61,196.00,233.08,
@@ -1516,18 +1587,32 @@ var Sound = (function(){
   return {
     init: init,
     isOn: function(){ return on; },
-    setOn: function(v){ on = v; },
+    // Ramps master gain smoothly instead of hard-cutting mid-note when the
+    // player toggles sound — avoids the click/pop of notes stopping dead,
+    // and lets a quick double-tap of the mute button feel intentional
+    // rather than glitchy.
+    setOn: function(v){
+      on = v;
+      if(muteTimer){ clearTimeout(muteTimer); muteTimer = null; }
+      if(ready && master){
+        var now = ctx.currentTime;
+        master.gain.cancelScheduledValues(now);
+        master.gain.setValueAtTime(master.gain.value, now);
+        master.gain.linearRampToValueAtTime(v ? .9 : 0, now + .12);
+      }
+    },
 
-    ui: function(){ noise({ freq:2200, dur:.04, vol:.05, q:2 }); },
+    ui: function(){ noise({ freq:jitter(2200,90), dur:.04, vol:.05, q:2 }); },
 
-    /* turning a disc — a wooden tap with an airy swish over it */
+    /* turning a disc — a wooden tap with an airy swish over it, lightly
+       humanized so repeated flips in a row don't sound like a metronome */
     flip: function(){
-      noise({ freq:1100, sweepTo:2400, dur:.09, vol:.13, q:1.1 });
-      voice({ freq:320, glide:520, type:"triangle", dur:.14, vol:.05, cutoff:1600 });
+      noise({ freq:jitter(1100,60), sweepTo:2400, dur:.09, vol:.13, q:1.1 });
+      voice({ freq:jitter(320,10), glide:520, type:"triangle", dur:.14, vol:.05, cutoff:1600 });
     },
     flipFoe: function(){
-      noise({ freq:800, sweepTo:1600, dur:.09, vol:.09, q:1.1 });
-      voice({ freq:240, glide:380, type:"triangle", dur:.14, vol:.04, cutoff:1200 });
+      noise({ freq:jitter(800,50), sweepTo:1600, dur:.09, vol:.09, q:1.1 });
+      voice({ freq:jitter(240,8), glide:380, type:"triangle", dur:.14, vol:.04, cutoff:1200 });
     },
 
     /* correct — the note climbs the scale with your streak */
@@ -1564,7 +1649,28 @@ var Sound = (function(){
     },
 
     join: function(){ chord([329.63,493.88,659.25], .6, .06); },
-    leave: function(){ voice({ freq:392, glide:196, type:"sine", dur:.6, vol:.07, cutoff:1200, sweepTo:300 }); }
+    leave: function(){ voice({ freq:392, glide:196, type:"sine", dur:.6, vol:.07, cutoff:1200, sweepTo:300 }); }, 
+
+    /* win streak milestone — a quick upward sparkle layered under the win
+       chime, brighter the longer the streak runs (caps out so it never
+       gets shrill on a very long run) */
+    streak: function(n){
+      var bright = Math.min(n || 0, 8);
+      for(var i=0;i<3;i++){
+        voice({ freq:SCALE[Math.min(9+i+Math.floor(bright/2), SCALE.length-1)], type:"triangle",
+          dur:.22, vol:.045, attack:.006, delay:.55 + i*.07, cutoff:6000 });
+      }
+    },
+
+    /* new personal-best streak — a small fanfare on top of the win chime,
+       distinct enough to register as "record", not just "won" */
+    record: function(){
+      [0,4,7,12].forEach(function(n,i){
+        voice({ freq:SCALE[Math.min(n, SCALE.length-1)]*2, type:"sine", dur:.4, vol:.07, attack:.008, delay:.5+i*.09, cutoff:5200 });
+      });
+      noise({ freq:6000, sweepTo:9000, dur:.3, vol:.05, delay:.5, q:1.4 });
+      chord([392.00,523.25,659.25,987.77], 1.2, .045, 1.3);
+    }
   };
 })();
 
@@ -2476,6 +2582,11 @@ function finish(winner){
     $("statFlips").textContent = flipCount;
     $("rematchNote").classList.add("hidden");
 
+    var record = Profile.recordMatchResult(winner === "you");
+    $("statStreak").textContent = record.streak;
+    var streakNote = $("streakNote");
+    streakNote.classList.add("hidden");
+
     if(winner === "you"){
       $("crest").innerHTML = crestWin();
       $("endTitle").textContent = "YOU WIN";
@@ -2483,7 +2594,18 @@ function finish(winner){
       var reward = mode === "online" ? ONLINE_REWARD : DIFF[difficulty].reward;
       var newBal = Profile.addMemos(reward, mode === "online" ? "online_win" : "solo_win_" + difficulty);
       $("endMsg").textContent = "You completed the sequence first. The board never got ahead of you. +" + reward + " memos (" + newBal + " total).";
-      Sound.win(); petals();
+      if(record.isNewBest){
+        streakNote.textContent = "🔥 New personal best — " + record.streak + " wins in a row.";
+        streakNote.classList.remove("hidden");
+        Sound.record();
+      }else if(record.streak >= 3){
+        streakNote.textContent = "🔥 " + record.streak + " win streak.";
+        streakNote.classList.remove("hidden");
+        Sound.win(); Sound.streak(record.streak);
+      }else{
+        Sound.win();
+      }
+      petals();
     }else{
       var winnerName = null;
       if(mode === "online" && room.lastData && room.lastData.winner){
@@ -2751,9 +2873,20 @@ document.addEventListener("DOMContentLoaded", function(){
     });
   });
 
+  function renderProfileStats(){
+    var s = Profile.stats();
+    $("profWins").textContent = s.wins;
+    $("profLosses").textContent = s.losses;
+    $("profWinRate").textContent = s.matchesPlayed ? Math.round(100 * s.wins / s.matchesPlayed) + "%" : "—";
+    $("profStreak").textContent = s.streak + (s.streak >= 3 ? " 🔥" : "");
+    $("profBestStreak").textContent = s.bestStreak;
+    $("profMatchesNote").textContent = s.matchesPlayed + (s.matchesPlayed === 1 ? " match played" : " matches played");
+  }
+
   function openProfile(){
     var p = Profile.get();
     $("profBalance").textContent = fmtMemos(p.memos);
+    renderProfileStats();
     $("avaCurrentImg").src = p.avatar;
     $("avaCurrentImg").style.display = "";
     pendingAvatar = null;
@@ -3315,6 +3448,16 @@ document.addEventListener("DOMContentLoaded", function(){
     return (t && t.id !== "none") ? t.name : "";
   }
 
+  var LB_SORTS = {
+    memos:      { field:"memos",      label:"Ranked by memos earned. Signed-in players only.",
+                  statHTML:function(r){ return '<span class="lb-memos"><img src="https://iili.io/noXdxMG.png" alt="" class="memos-icon">'+fmtMemos(r.memos||0)+'</span>'; } },
+    wins:       { field:"wins",       label:"Ranked by total wins. Signed-in players only.",
+                  statHTML:function(r){ return '<span class="lb-stat">'+(r.wins||0)+' wins</span>'; } },
+    bestStreak: { field:"bestStreak", label:"Ranked by longest win streak. Signed-in players only.",
+                  statHTML:function(r){ return '<span class="lb-stat">🔥 '+(r.bestStreak||0)+'</span>'; } }
+  };
+  var lbSort = "memos";
+
   function renderLeaderboardRows(rows){
     var list = $("lbList");
     list.innerHTML = "";
@@ -3323,6 +3466,7 @@ document.addEventListener("DOMContentLoaded", function(){
       return;
     }
     var myUid = Profile.isSignedIn() ? Profile.email() : null;
+    var statHTML = LB_SORTS[lbSort].statHTML;
     rows.forEach(function(r, idx){
       var row = document.createElement("div");
       row.className = "lb-row" + (myUid && r.email === myUid ? " me" : "");
@@ -3332,18 +3476,19 @@ document.addEventListener("DOMContentLoaded", function(){
         lbAvatarHTML(r)+
         '<span class="lb-name"><span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+escapeHtml(r.name||"Diver")+'</span>'+
           (badgeTitle ? '<span class="title-badge">'+escapeHtml(badgeTitle)+'</span>' : "")+'</span>'+
-        '<span class="lb-memos"><img src="https://iili.io/noXdxMG.png" alt="" class="memos-icon">'+fmtMemos(r.memos||0)+'</span>';
+        statHTML(r);
       list.appendChild(row);
     });
   }
 
   function loadLeaderboard(){
     $("lbList").innerHTML = '<p class="note">Loading…</p>';
+    $("lbSub").textContent = LB_SORTS[lbSort].label;
     if(!initFirebase()){
       $("lbList").innerHTML = '<p class="note">Firebase isn\'t configured yet, so there\'s no shared leaderboard to show.</p>';
       return;
     }
-    db.ref("users").orderByChild("memos").limitToLast(50).once("value").then(function(snap){
+    db.ref("users").orderByChild(LB_SORTS[lbSort].field).limitToLast(50).once("value").then(function(snap){
       var rows = [];
       snap.forEach(function(child){ rows.push(child.val()); });
       rows.reverse();
@@ -3354,8 +3499,19 @@ document.addEventListener("DOMContentLoaded", function(){
     });
   }
 
+  $("lbTabSeg").addEventListener("click", function(e){
+    var b = e.target.closest("button"); if(!b) return;
+    Array.prototype.forEach.call($("lbTabSeg").children, function(x){ x.classList.remove("active"); });
+    b.classList.add("active");
+    Sound.init(); Sound.ui();
+    lbSort = b.dataset.sort;
+    loadLeaderboard();
+  });
+
   $("bLeaderboard").addEventListener("click", function(){
     Sound.init(); Sound.ui();
+    lbSort = "memos";
+    Array.prototype.forEach.call($("lbTabSeg").children, function(x){ x.classList.toggle("active", x.dataset.sort === "memos"); });
     show("leaderboard");
     loadLeaderboard();
   });
