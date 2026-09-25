@@ -727,6 +727,8 @@ button:focus-visible{ outline:2px solid var(--foam); outline-offset:4px; }
 
 <div class="toast" id="toast"></div>
 
+<audio id="menuMusic" loop preload="auto" src="https://raw.githubusercontent.com/r2ftzu1ha2vy-glitch/Flip-Remember/main/b82003e4-be7e-4961-848d-630d20ae1704.mp3"></audio>
+
 <div class="banned-overlay hidden" id="bannedOverlay" role="alertdialog" aria-modal="true" aria-labelledby="bannedTitle">
   <div class="banned-card">
     <div class="banned-icon">
@@ -2444,6 +2446,7 @@ function showBannedScreen(reason){
   clearTimers();
   over = true; started = false;
   if(typeof room !== "undefined" && room && room.ref) detachRoom();
+  pauseMenuMusic();
   $("bannedReasonText").textContent = reason ? reason : "No reason given.";
   $("app").classList.add("hidden");
   $("toast").classList.remove("show");
@@ -2466,9 +2469,23 @@ function hideBannedScreen(){
   toast("Welcome back — you're unbanned.");
 }
 
+/* ===================== menu music ===================== */
+var menuMusicEl = null;
+function menuMusic(){ return menuMusicEl || (menuMusicEl = $("menuMusic")); }
+function playMenuMusic(){
+  var el = menuMusic();
+  if(!Sound.isOn()) return;
+  if(el.paused){ el.volume = .5; el.play().catch(function(){ /* blocked until a user gesture — retried below */ }); }
+}
+function pauseMenuMusic(){
+  var el = menuMusic();
+  if(!el.paused) el.pause();
+}
+
 /* ===================== screens ===================== */
 function show(name){
   if(banLockdown) return; // banned players don't get to navigate anywhere else
+  if(name === "menu") playMenuMusic(); else pauseMenuMusic();
   $("s-menu").classList.toggle("hidden", name!=="menu");
   $("s-roomsettings").classList.toggle("hidden", name!=="roomsettings");
   $("s-profile").classList.toggle("hidden", name!=="profile");
@@ -2538,6 +2555,17 @@ var MARKS = {
 /* ===================== boot ===================== */
 document.addEventListener("DOMContentLoaded", function(){
   boardEl = $("board"); msgEl = $("msg"); objNum = $("objNum"); objective = $("objective");
+
+  // Browsers block audio with sound until the page has seen a real user
+  // gesture. The menu is the default screen, so try once right away (works
+  // if the tab already had focus/interaction) and once more on the first
+  // tap/click/keypress anywhere on the page as a guaranteed fallback.
+  playMenuMusic();
+  ["pointerdown","keydown"].forEach(function(evt){
+    document.addEventListener(evt, function unlockMenuMusic(){
+      if(!banLockdown && !$("s-menu").classList.contains("hidden")) playMenuMusic();
+    }, { once:true });
+  });
 
   initFirebase(); // safe no-op if unconfigured; wires up auth state listener when available
 
@@ -2811,7 +2839,8 @@ document.addEventListener("DOMContentLoaded", function(){
     $("wave2").style.display = s ? "" : "none";
     $("mute1").style.display = s ? "none" : "";
     $("mute2").style.display = s ? "none" : "";
-    if(s) Sound.ui();
+    if(s){ Sound.ui(); if(!$("s-menu").classList.contains("hidden")) playMenuMusic(); }
+    else{ pauseMenuMusic(); }
   });
 
   $("modeSeg").addEventListener("click", function(e){
