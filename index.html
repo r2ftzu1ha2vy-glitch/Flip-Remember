@@ -865,26 +865,37 @@ var Profile = (function(){
   var counterKey = "farPlayerNum";
   var authUser = null;   // firebase.User when signed in, else null
   var userRef = null;    // db.ref("users/"+uid) when signed in
-  var banWatchRef = null; // the userRef currently being watched for a live ban
+  var banWatchRef = null; // the userRef currently being watched for live account changes
   var bannedCallback = null; // registered via onBanned(); fired the instant an admin bans this account
 
   function onBanned(cb){ bannedCallback = cb; }
 
-  // Live ban enforcement: once signed in, keep listening on this account's
-  // record so a ban applied *while someone is mid-session* (not just at the
-  // next sign-in) kicks them out immediately instead of waiting for a reload.
-  function handleBanSnapshot(snap){
+  // Live sync: once signed in, keep listening on this account's own record so
+  // anything an admin does to it from another device — ban, memo grant, title
+  // — lands immediately here instead of waiting for a reload. A ban ends the
+  // session outright; memos/title are merged into local state in place.
+  function handleAccountSnapshot(snap){
     var v = snap.val();
-    if(v && v.banned && bannedCallback) bannedCallback(v.banReason || "");
+    if(!v) return;
+    if(v.banned){ if(bannedCallback) bannedCallback(v.banReason || ""); return; }
+    if(!data) return;
+    var changed = false;
+    if(typeof v.memos === "number" && v.memos !== data.memos){ data.memos = v.memos; changed = true; }
+    var incomingTitle = v.title || "";
+    if(incomingTitle !== (data.title || "")){ data.title = incomingTitle; changed = true; }
+    if(changed){
+      try{ localStorage.setItem(KEY, JSON.stringify(data)); }catch(e){}
+      renderChip();
+    }
   }
   function watchBan(){
     unwatchBan();
     if(!userRef) return;
     banWatchRef = userRef;
-    banWatchRef.on("value", handleBanSnapshot);
+    banWatchRef.on("value", handleAccountSnapshot);
   }
   function unwatchBan(){
-    if(banWatchRef){ banWatchRef.off("value", handleBanSnapshot); banWatchRef = null; }
+    if(banWatchRef){ banWatchRef.off("value", handleAccountSnapshot); banWatchRef = null; }
   }
 
   function nextPlayerNumber(){
