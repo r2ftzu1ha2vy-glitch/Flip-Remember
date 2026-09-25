@@ -2736,6 +2736,7 @@ function pauseMenuMusic(){
 function show(name){
   if(banLockdown) return; // banned players don't get to navigate anywhere else
   if(name === "game") duckMenuMusic(); else playMenuMusic();
+  if(name !== "leaderboard") stopLeaderboardAutoRefresh();
   $("s-menu").classList.toggle("hidden", name!=="menu");
   $("s-roomsettings").classList.toggle("hidden", name!=="roomsettings");
   $("s-profile").classList.toggle("hidden", name!=="profile");
@@ -3499,10 +3500,25 @@ document.addEventListener("DOMContentLoaded", function(){
     });
   }
 
-  function loadLeaderboard(){
-    $("lbList").innerHTML = '<p class="note">Loading…</p>';
+  var lbRefreshTimer = null, lbLoading = false;
+  function stopLeaderboardAutoRefresh(){
+    if(lbRefreshTimer){ clearInterval(lbRefreshTimer); lbRefreshTimer = null; }
+  }
+  function startLeaderboardAutoRefresh(){
+    stopLeaderboardAutoRefresh();
+    // Keeps the board current while it's open — someone else finishing a
+    // match, or you finishing one yourself, shows up within a few seconds
+    // without needing to back out and reopen the screen.
+    lbRefreshTimer = setInterval(function(){ loadLeaderboard(true); }, 5000);
+  }
+
+  function loadLeaderboard(silent){
+    if(lbLoading) return;
+    lbLoading = true;
+    if(!silent) $("lbList").innerHTML = '<p class="note">Loading…</p>';
     $("lbSub").textContent = LB_SORTS[lbSort].label;
     if(!initFirebase()){
+      lbLoading = false;
       $("lbList").innerHTML = '<p class="note">Firebase isn\'t configured yet, so there\'s no shared leaderboard to show.</p>';
       return;
     }
@@ -3514,7 +3530,7 @@ document.addEventListener("DOMContentLoaded", function(){
     }).catch(function(e){
       console.error(e);
       $("lbList").innerHTML = '<p class="note">Couldn\'t load the leaderboard right now.</p>';
-    });
+    }).finally(function(){ lbLoading = false; });
   }
 
   $("lbTabSeg").addEventListener("click", function(e){
@@ -3532,6 +3548,7 @@ document.addEventListener("DOMContentLoaded", function(){
     Array.prototype.forEach.call($("lbTabSeg").children, function(x){ x.classList.toggle("active", x.dataset.sort === "memos"); });
     show("leaderboard");
     loadLeaderboard();
+    startLeaderboardAutoRefresh();
   });
   $("bLeaderboardBack").addEventListener("click", function(){ Sound.init(); show("menu"); });
 
