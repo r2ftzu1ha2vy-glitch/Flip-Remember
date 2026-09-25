@@ -852,17 +852,29 @@ function rollThemeId(){
    to Firebase alongside the rest of Profile. "none" is the free starter frame
    (no image drawn). Fill in `img` with the frame's transparent PNG/SVG URL —
    drawn scaled up and centered over the avatar circle, so the art should be a
-   ring/border that extends past the avatar edge, not a filled square. */
+   ring/border that extends past the avatar edge, not a filled square.
+   offsetX / offsetY nudge that art if it isn't centered in its own canvas —
+   percent of the ring's own box, positive X moves it right, positive Y moves
+   it down. Leave at 0 for art that's already centered. */
 var FRAMES = [
-  { id:"none",    name:"No Frame",     rarity:"starter", img:"https://iili.io/nRBsR6u.png" },
-  { id:"bubble",  name:"Bubble Ring",  rarity:"common", img:"https://iili.io/nRBD2rF.png", weight:34 },
-  { id:"oceanic", name:"Oceanic Ring", rarity:"common", img:"https://iili.io/nRBscyQ.png", weight:28 },
-  { id:"coral",   name:"Coral Ring",   rarity:"rare",   img:"https://iili.io/nRBsYaj.png", weight:16 },
+  { id:"none",    name:"No Frame",     rarity:"starter", img:"https://iili.io/nRBsR6u.png", offsetX:8, offsetY:8 },
+  { id:"bubble",  name:"Bubble Ring",  rarity:"common", img:"https://iili.io/nRBD2rF.png", weight:34, offsetX:8, offsetY:8 },
+  { id:"oceanic", name:"Oceanic Ring", rarity:"common", img:"https://iili.io/nRBscyQ.png", weight:28, offsetX:0, offsetY:0 },
+  { id:"coral",   name:"Coral Ring",   rarity:"rare",   img:"https://iili.io/nRBsYaj.png", weight:16, offsetX:0, offsetY:0 },
 ];
 var FRAME_BY_ID = {};
 FRAMES.forEach(function(f){ FRAME_BY_ID[f.id] = f; });
 var ROLLABLE_FRAMES = FRAMES.filter(function(f){ return f.rarity !== "starter"; });
 var COST_FRAME_ROLL = 50, DUPLICATE_FRAME_REFUND = 15;
+
+// Returns an inline transform for a frame's offsetX/offsetY tuning (percent
+// of the ring's own box, +X right, +Y down). Empty string when both are 0 so
+// untouched frames don't carry a no-op style attribute.
+function frameOffsetTransform(f){
+  var ox = (f && f.offsetX) || 0, oy = (f && f.offsetY) || 0;
+  if(!ox && !oy) return "";
+  return "transform:translate("+ox+"%,"+oy+"%);";
+}
 
 function rollFrameId(){
   var totalWeight = ROLLABLE_FRAMES.reduce(function(s,f){ return s + f.weight; }, 0);
@@ -1355,6 +1367,7 @@ var Profile = (function(){
     var f = FRAME_BY_ID[frameId] || FRAME_BY_ID.none;
     if(f && f.img){
       imgEl.src = f.img;
+      imgEl.style.transform = frameOffsetTransform(f).replace(/^transform:|;$/g, "");
       imgEl.classList.add("on");
     }else{
       imgEl.removeAttribute("src");
@@ -3152,7 +3165,7 @@ document.addEventListener("DOMContentLoaded", function(){
     }
     return '<div class="frame-preview" style="width:74px;height:74px">'+
       '<img class="frame-preview-avatar" style="width:56px;height:56px" src="'+avaSrc+'" alt="">'+
-      '<img class="frame-preview-ring" style="width:130%;height:130%" src="'+frame.img+'" alt="">'+
+      '<img class="frame-preview-ring" style="width:130%;height:130%;'+frameOffsetTransform(frame)+'" src="'+frame.img+'" alt="">'+
       '</div>';
   }
 
@@ -3166,7 +3179,7 @@ document.addEventListener("DOMContentLoaded", function(){
       var card = document.createElement("button");
       card.className = "frame-card" + (owned ? "" : " locked") + (owned && f.id === equipped ? " equipped" : "");
       var previewImgs = '<img class="frame-preview-avatar" src="'+avaSrc+'" alt="">' +
-        (f.img ? '<img class="frame-preview-ring" src="'+f.img+'" alt="">' : "");
+        (f.img ? '<img class="frame-preview-ring" style="'+frameOffsetTransform(f)+'" src="'+f.img+'" alt="">' : "");
       card.innerHTML =
         (owned && f.id === equipped ? '<span class="frame-equip-tag">EQUIPPED</span>' : "") +
         '<div class="frame-preview">'+previewImgs+'</div>'+
@@ -3326,7 +3339,7 @@ document.addEventListener("DOMContentLoaded", function(){
     var f = FRAME_BY_ID[r.equippedFrame] || FRAME_BY_ID.none;
     var avaImg = '<img class="lb-avatar" src="'+(r.avatar||DEFAULT_AVATAR)+'" alt="">';
     if(!f || !f.img) return avaImg;
-    return '<span class="ava-frame-wrap">'+avaImg+'<img class="frame-ring" src="'+f.img+'" alt=""></span>';
+    return '<span class="ava-frame-wrap">'+avaImg+'<img class="frame-ring" style="'+frameOffsetTransform(f)+'" src="'+f.img+'" alt=""></span>';
   }
 
   function renderLeaderboardRows(rows){
