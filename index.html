@@ -2733,10 +2733,15 @@ function pauseMenuMusic(){
 }
 
 /* ===================== screens ===================== */
+// Leaderboard auto-refresh timer handle. Declared at outer scope so show()
+// (defined here) and the leaderboard code (defined inside the
+// DOMContentLoaded handler further down) can both reach the same timer —
+// show() clears it directly, the leaderboard code starts/stops it.
+var lbRefreshTimer = null;
 function show(name){
   if(banLockdown) return; // banned players don't get to navigate anywhere else
   if(name === "game") duckMenuMusic(); else playMenuMusic();
-  if(name !== "leaderboard") stopLeaderboardAutoRefresh();
+  if(name !== "leaderboard" && lbRefreshTimer){ clearInterval(lbRefreshTimer); lbRefreshTimer = null; }
   $("s-menu").classList.toggle("hidden", name!=="menu");
   $("s-roomsettings").classList.toggle("hidden", name!=="roomsettings");
   $("s-profile").classList.toggle("hidden", name!=="profile");
@@ -3500,7 +3505,7 @@ document.addEventListener("DOMContentLoaded", function(){
     });
   }
 
-  var lbRefreshTimer = null, lbLoading = false;
+  var lbLoading = false;
   function stopLeaderboardAutoRefresh(){
     if(lbRefreshTimer){ clearInterval(lbRefreshTimer); lbRefreshTimer = null; }
   }
