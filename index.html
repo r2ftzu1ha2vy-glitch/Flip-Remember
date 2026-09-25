@@ -207,8 +207,6 @@ button:focus-visible{ outline:2px solid var(--foam); outline-offset:4px; }
 .profile-chip-ava{ width:28px; height:28px; border-radius:50%; background:rgba(255,255,255,.05); border:1px solid var(--line);
   display:flex; align-items:center; justify-content:center; font-size:15px; flex:0 0 auto; line-height:1; position:relative; }
 .profile-chip-ava img#chipAvatarImg{ width:100%; height:100%; object-fit:cover; border-radius:50%; }
-.profile-chip-ava .frame-ring{ position:absolute; inset:0; width:180%; height:180%; left:-40%; top:-40%; object-fit:contain; pointer-events:none; display:none; z-index:2; }
-.profile-chip-ava .frame-ring.on{ display:block; }
 .profile-chip-info{ display:flex; flex-direction:column; align-items:flex-start; gap:1px; min-width:0; }
 .profile-chip-name{ font-size:.76rem; color:var(--text-soft); letter-spacing:.03em; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:120px; }
 .profile-chip-memos{ display:flex; align-items:center; gap:4px; font-size:.72rem; color:var(--sand); font-weight:400; }
@@ -224,8 +222,6 @@ button:focus-visible{ outline:2px solid var(--foam); outline-offset:4px; }
 .ava-current{ width:76px; height:76px; border-radius:50%; background:rgba(255,255,255,.04); border:1px solid var(--line-strong);
   display:flex; align-items:center; justify-content:center; font-size:38px; line-height:1; position:relative; }
 .ava-current img#avaCurrentImg{ width:100%; height:100%; object-fit:cover; border-radius:50%; }
-.ava-current .frame-ring{ position:absolute; inset:0; width:160%; height:160%; left:-30%; top:-30%; object-fit:contain; pointer-events:none; display:none; z-index:2; }
-.ava-current .frame-ring.on{ display:block; }
 .ava-grid{ display:grid; grid-template-columns:repeat(6,1fr); gap:9px; width:100%; max-width:340px; }
 .ava-opt{ aspect-ratio:1; border-radius:14px; background:rgba(255,255,255,.03); border:1px solid var(--line);
   display:flex; align-items:center; justify-content:center; font-size:21px; transition:border-color .25s,background .25s,transform .2s; overflow:hidden; padding:0; }
@@ -303,32 +299,6 @@ button:focus-visible{ outline:2px solid var(--foam); outline-offset:4px; }
 .theme-rarity.starter{ color:var(--foam); }
 .theme-equip-tag{ position:absolute; top:6px; right:6px; font-size:.58rem; letter-spacing:.08em; color:var(--foam); background:rgba(127,216,196,.14); padding:2px 6px; border-radius:999px; }
 
-/* ===== profile frames (cosmetic, gacha — mirrors theme roll) ===== */
-.frame-grid{ display:grid; grid-template-columns:repeat(3,1fr); gap:12px; width:100%; max-width:420px; margin-top:26px; }
-@media (max-width:420px){ .frame-grid{ grid-template-columns:repeat(2,1fr); } }
-.frame-card{ position:relative; aspect-ratio:1/1.15; border-radius:16px; border:1px solid var(--line); background:rgba(255,255,255,.03);
-  display:flex; flex-direction:column; align-items:center; justify-content:center; gap:8px; padding:10px; transition:border-color .25s,box-shadow .25s,transform .15s; }
-.frame-card:active{ transform:scale(.96); }
-.frame-card.locked{ opacity:.35; }
-.frame-card.equipped{ border-color:var(--foam); box-shadow:0 0 22px rgba(127,216,196,.18); }
-.frame-preview{ position:relative; width:44px; height:44px; display:flex; align-items:center; justify-content:center; }
-.frame-preview img.frame-preview-avatar{ width:30px; height:30px; border-radius:50%; object-fit:cover; }
-.frame-preview img.frame-preview-ring{ position:absolute; inset:0; width:100%; height:100%; object-fit:contain; pointer-events:none; }
-.frame-name{ font-size:.72rem; color:var(--text-soft); text-align:center; letter-spacing:.03em; line-height:1.2; }
-.frame-rarity{ font-size:.6rem; letter-spacing:.14em; text-transform:uppercase; }
-.frame-rarity.common{ color:var(--text-dim); }
-.frame-rarity.rare{ color:var(--tide); }
-.frame-rarity.epic{ color:var(--sand); }
-.frame-rarity.starter{ color:var(--foam); }
-.frame-equip-tag{ position:absolute; top:6px; right:6px; font-size:.58rem; letter-spacing:.08em; color:var(--foam); background:rgba(127,216,196,.14); padding:2px 6px; border-radius:999px; }
-.roll-disc.frame-disc{ display:flex; align-items:center; justify-content:center; }
-
-/* avatar-with-frame wrapper — used for dynamically-built rows (leaderboard) where
-   an equipped frame must render around a plain <img class="lb-avatar">. */
-.ava-frame-wrap{ position:relative; display:inline-flex; align-items:center; justify-content:center; flex:0 0 auto; width:32px; height:32px; }
-.ava-frame-wrap img.lb-avatar{ position:relative; z-index:1; width:32px; height:32px; }
-.ava-frame-wrap .frame-ring{ position:absolute; inset:0; width:180%; height:180%; left:-40%; top:-40%; object-fit:contain; pointer-events:none; z-index:2; }
-
 .emote-row{ display:flex; flex-wrap:wrap; gap:10px; justify-content:center; width:100%; max-width:380px; margin-top:26px; }
 .emote-chip{ width:52px; height:52px; border-radius:16px; background:rgba(255,255,255,.03); border:1px solid var(--line); font-size:1.5rem; display:flex; align-items:center; justify-content:center; color:var(--text-soft); transition:border-color .25s,color .25s,transform .2s; }
 .emote-chip svg{ width:26px; height:26px; }
@@ -404,7 +374,7 @@ button:focus-visible{ outline:2px solid var(--foam); outline-offset:4px; }
 <div id="app">
   <div class="top-bar">
     <button class="profile-chip" id="bProfile" aria-label="Profile settings">
-      <span class="profile-chip-ava" id="chipAvatar"><img id="chipAvatarImg" src="" alt="" style="display:none"><img id="chipFrameRing" class="frame-ring" src="" alt=""></span>
+      <span class="profile-chip-ava" id="chipAvatar"><img id="chipAvatarImg" src="" alt="" style="display:none"></span>
       <span class="profile-chip-info">
         <span class="profile-chip-name" id="chipName">Diver</span>
         <span class="profile-chip-memos"><img src="https://iili.io/noXdxMG.png" alt="" class="memos-icon"><span id="chipMemos">0</span></span>
@@ -570,7 +540,7 @@ button:focus-visible{ outline:2px solid var(--foam); outline-offset:4px; }
 
     <div class="profile-card profile-section">
       <span class="block-title">PROFILE PICTURE</span>
-      <div class="ava-current" id="avaCurrent"><img id="avaCurrentImg" src="" alt="" style="display:none"><img id="avaCurrentFrameRing" class="frame-ring" src="" alt=""></div>
+      <div class="ava-current" id="avaCurrent"><img id="avaCurrentImg" src="" alt="" style="display:none"></div>
       <input type="file" id="avaFileInput" accept="image/png,image/jpeg,image/webp,image/gif" style="display:none">
       <button class="btn btn-ghost btn-small" id="bChooseFile">Choose image…</button>
       <span class="note" id="avaFileName"></span>
@@ -702,7 +672,6 @@ button:focus-visible{ outline:2px solid var(--foam); outline-offset:4px; }
     <p class="note" style="margin-top:8px">Roll for card themes and pick your emotes.</p>
     <div class="tab-seg" id="collTabSeg" role="group" aria-label="Collection tab">
       <button data-tab="themes" class="active">Themes</button>
-      <button data-tab="frames">Frames</button>
       <button data-tab="emotes">Emotes</button>
     </div>
 
@@ -713,15 +682,6 @@ button:focus-visible{ outline:2px solid var(--foam); outline-offset:4px; }
         <button class="btn btn-primary btn-small" id="bRollTheme">Roll — 50 memos</button>
       </div>
       <div class="theme-grid" id="themeGrid"></div>
-    </div>
-
-    <div id="collFrames" class="hidden">
-      <div class="roll-panel">
-        <div class="roll-disc frame-disc" id="rollFrameDisc"></div>
-        <span class="note" id="rollFrameNote" style="margin:0">Roll a new profile frame for 50 memos.</span>
-        <button class="btn btn-primary btn-small" id="bRollFrame">Roll — 50 memos</button>
-      </div>
-      <div class="frame-grid" id="frameGrid"></div>
     </div>
 
     <div id="collEmotes" class="hidden">
@@ -845,45 +805,6 @@ function rollThemeId(){
     if(r <= 0) return ROLLABLE_THEMES[i].id;
   }
   return ROLLABLE_THEMES[ROLLABLE_THEMES.length-1].id;
-}
-
-/* ===================== profile frames (cosmetic, gacha) =====================
-   Same mechanic as card themes: weighted roll, owned-list + equipped, synced
-   to Firebase alongside the rest of Profile. "none" is the free starter frame
-   (no image drawn). Fill in `img` with the frame's transparent PNG/SVG URL —
-   drawn scaled up and centered over the avatar circle, so the art should be a
-   ring/border that extends past the avatar edge, not a filled square.
-   offsetX / offsetY nudge that art if it isn't centered in its own canvas —
-   percent of the ring's own box, positive X moves it right, positive Y moves
-   it down. Leave at 0 for art that's already centered. */
-var FRAMES = [
-  { id:"none",    name:"No Frame",     rarity:"starter", img:"https://iili.io/nRBsR6u.png", offsetX:8, offsetY:8 },
-  { id:"bubble",  name:"Bubble Ring",  rarity:"common", img:"https://iili.io/nRBD2rF.png", weight:34, offsetX:8, offsetY:8 },
-  { id:"oceanic", name:"Oceanic Ring", rarity:"common", img:"https://iili.io/nRBscyQ.png", weight:28, offsetX:0, offsetY:0 },
-  { id:"coral",   name:"Coral Ring",   rarity:"rare",   img:"https://iili.io/nRBsYaj.png", weight:16, offsetX:0, offsetY:0 },
-];
-var FRAME_BY_ID = {};
-FRAMES.forEach(function(f){ FRAME_BY_ID[f.id] = f; });
-var ROLLABLE_FRAMES = FRAMES.filter(function(f){ return f.rarity !== "starter"; });
-var COST_FRAME_ROLL = 50, DUPLICATE_FRAME_REFUND = 15;
-
-// Returns an inline transform for a frame's offsetX/offsetY tuning (percent
-// of the ring's own box, +X right, +Y down). Empty string when both are 0 so
-// untouched frames don't carry a no-op style attribute.
-function frameOffsetTransform(f){
-  var ox = (f && f.offsetX) || 0, oy = (f && f.offsetY) || 0;
-  if(!ox && !oy) return "";
-  return "transform:translate("+ox+"%,"+oy+"%);";
-}
-
-function rollFrameId(){
-  var totalWeight = ROLLABLE_FRAMES.reduce(function(s,f){ return s + f.weight; }, 0);
-  var r = Math.random() * totalWeight;
-  for(var i=0;i<ROLLABLE_FRAMES.length;i++){
-    r -= ROLLABLE_FRAMES[i].weight;
-    if(r <= 0) return ROLLABLE_FRAMES[i].id;
-  }
-  return ROLLABLE_FRAMES[ROLLABLE_FRAMES.length-1].id;
 }
 
 /* ===================== emotes ===================== */
@@ -1022,7 +943,7 @@ var Profile = (function(){
     }catch(e){ return Math.floor(Math.random()*9000)+1000; }
   }
 
-  function def(){ return { avatar:DEFAULT_AVATAR, name:"Player" + nextPlayerNumber(), memos:0, themes:["default"], equippedTheme:"default", frames:["none"], equippedFrame:"none", emote:"wave", title:"" }; }
+  function def(){ return { avatar:DEFAULT_AVATAR, name:"Player" + nextPlayerNumber(), memos:0, themes:["default"], equippedTheme:"default", emote:"wave", title:"" }; }
 
   function load(){
     try{
@@ -1031,9 +952,6 @@ var Profile = (function(){
       if(!data.themes || !data.themes.length) data.themes = ["default"];
       if(data.themes.indexOf("default") === -1) data.themes.unshift("default");
       if(!data.equippedTheme) data.equippedTheme = "default";
-      if(!data.frames || !data.frames.length) data.frames = ["none"];
-      if(data.frames.indexOf("none") === -1) data.frames.unshift("none");
-      if(!data.equippedFrame) data.equippedFrame = "none";
       if(!data.emote) data.emote = "wave";
       if(!data.title) data.title = "";
     }catch(e){ data = def(); }
@@ -1047,8 +965,6 @@ var Profile = (function(){
         avatar:data.avatar, name:data.name, memos:data.memos,
         themes: (data.themes && data.themes.length) ? data.themes : ["default"],
         equippedTheme: data.equippedTheme || "default",
-        frames: (data.frames && data.frames.length) ? data.frames : ["none"],
-        equippedFrame: data.equippedFrame || "none",
         emote: data.emote || "wave"
       }).catch(function(){});
     }
@@ -1104,27 +1020,6 @@ var Profile = (function(){
     logLedger(isNew ? "theme_roll_new_" + id : "theme_roll_dupe_" + id, -COST_THEME_ROLL + refund, data.memos);
     return { ok:true, id:id, isNew:isNew, refund:refund };
   }
-  function ownsFrame(id){ get(); return data.frames.indexOf(id) !== -1; }
-  function equippedFrame(){ get(); return data.equippedFrame || "none"; }
-  function equipFrame(id){
-    get();
-    if(data.frames.indexOf(id) === -1) return false;
-    data.equippedFrame = id; save(); renderChip();
-    return true;
-  }
-  function rollFrame(){
-    get();
-    if(data.memos < COST_FRAME_ROLL) return { ok:false, reason:"funds" };
-    data.memos -= COST_FRAME_ROLL;
-    var id = rollFrameId();
-    var isNew = data.frames.indexOf(id) === -1;
-    var refund = 0;
-    if(isNew){ data.frames.push(id); }
-    else{ refund = DUPLICATE_FRAME_REFUND; data.memos += refund; }
-    save(); renderChip();
-    logLedger(isNew ? "frame_roll_new_" + id : "frame_roll_dupe_" + id, -COST_FRAME_ROLL + refund, data.memos);
-    return { ok:true, id:id, isNew:isNew, refund:refund };
-  }
   function emote(){ get(); return data.emote || "wave"; }
   function setEmote(e){ get(); data.emote = e; save(); }
 
@@ -1172,8 +1067,6 @@ var Profile = (function(){
           avatar: remote.avatar || DEFAULT_AVATAR, name: remote.name || local.name, memos: remote.memos || 0,
           themes: (remote.themes && remote.themes.length) ? remote.themes : (local.themes || ["default"]),
           equippedTheme: remote.equippedTheme || local.equippedTheme || "default",
-          frames: (remote.frames && remote.frames.length) ? remote.frames : (local.frames || ["none"]),
-          equippedFrame: remote.equippedFrame || local.equippedFrame || "none",
           emote: remote.emote || local.emote || "👋",
           title: remote.title || ""
         };
@@ -1185,8 +1078,6 @@ var Profile = (function(){
           memos:  (remote.memos || 0) + (local.memos || 0),
           themes: Array.from(new Set((remote.themes || []).concat(local.themes || ["default"]))),
           equippedTheme: remote.equippedTheme || local.equippedTheme || "default",
-          frames: Array.from(new Set((remote.frames || []).concat(local.frames || ["none"]))),
-          equippedFrame: remote.equippedFrame || local.equippedFrame || "none",
           emote: remote.emote || local.emote || "👋",
           title: remote.title || ""
         };
@@ -1203,8 +1094,6 @@ var Profile = (function(){
           memos:  (local.memos || 0) + SIGNUP_BONUS,
           themes: local.themes || ["default"],
           equippedTheme: local.equippedTheme || "default",
-          frames: local.frames || ["none"],
-          equippedFrame: local.equippedFrame || "none",
           emote: local.emote || "👋",
           title: ""
         };
@@ -1214,7 +1103,7 @@ var Profile = (function(){
       // update(), not set() — this must never clobber admin-only fields
       // (title, banned, banReason) or the ledger subtree that already live
       // on this record.
-      return userRef.update({ avatar:data.avatar, name:data.name, memos:data.memos, email:user.email || null, themes:data.themes, equippedTheme:data.equippedTheme, frames:data.frames, equippedFrame:data.equippedFrame, emote:data.emote });
+      return userRef.update({ avatar:data.avatar, name:data.name, memos:data.memos, email:user.email || null, themes:data.themes, equippedTheme:data.equippedTheme, emote:data.emote });
     }).then(function(){
       save();
       renderChip();
@@ -1351,35 +1240,15 @@ var Profile = (function(){
     $("chipAvatarImg").style.display = "";
     $("chipName").innerHTML = escapeHtml(data.name) + (data.title ? ' <span class="title-badge">'+escapeHtml(data.title)+'</span>' : "");
     $("chipMemos").textContent = fmtMemos(data.memos);
-    var chipRing = $("chipFrameRing");
-    if(chipRing) applyFrameRingEl(chipRing, data.equippedFrame);
-    var currentRing = $("avaCurrentFrameRing");
-    if(currentRing) applyFrameRingEl(currentRing, data.equippedFrame);
     var yAva = $("pYouAvatar"), yLbl = $("youLabel");
     if(yAva){ yAva.src = data.avatar; yAva.classList.add("on"); }
     if(yLbl){ yLbl.textContent = data.name; }
-  }
-
-  // Sets a <img class="frame-ring"> element's src/visibility for the given
-  // equipped frame id. Shared by the HUD chip, the avatar editor preview,
-  // and anywhere else that renders the local player's own equipped frame.
-  function applyFrameRingEl(imgEl, frameId){
-    var f = FRAME_BY_ID[frameId] || FRAME_BY_ID.none;
-    if(f && f.img){
-      imgEl.src = f.img;
-      imgEl.style.transform = frameOffsetTransform(f).replace(/^transform:|;$/g, "");
-      imgEl.classList.add("on");
-    }else{
-      imgEl.removeAttribute("src");
-      imgEl.classList.remove("on");
-    }
   }
 
   return {
     get:get, load:load, addMemos:addMemos, spend:spend, setAvatar:setAvatar, setName:setName,
     renderChip:renderChip, isSignedIn:isSignedIn, email:email, attachAccount:attachAccount, detachAccount:detachAccount,
     ownsTheme:ownsTheme, equippedTheme:equippedTheme, equipTheme:equipTheme, rollTheme:rollTheme,
-    ownsFrame:ownsFrame, equippedFrame:equippedFrame, equipFrame:equipFrame, rollFrame:rollFrame,
     emote:emote, setEmote:setEmote,
     isAdmin:isAdmin, adminFindByEmail:adminFindByEmail, adminGrantMemos:adminGrantMemos,
     adminSetMemos:adminSetMemos, adminSetTitle:adminSetTitle, adminSetBan:adminSetBan,
@@ -2601,14 +2470,39 @@ function hideBannedScreen(){
 }
 
 /* ===================== menu music ===================== */
+// Music now plays continuously across the whole app — it only ever fades
+// between a "full" volume (menu / lobby / any non-match screen) and a
+// "ducked" volume (mid-match), rather than hard-stopping. This keeps a
+// single <audio> element playing gaplessly instead of restarting it.
 var menuMusicEl = null;
+var MUSIC_FULL = .5, MUSIC_DUCKED = .12, MUSIC_FADE_MS = 900, MUSIC_FADE_STEP = 40;
+var musicFadeTimer = null;
 function menuMusic(){ return menuMusicEl || (menuMusicEl = $("menuMusic")); }
-function playMenuMusic(){
+function fadeMusicTo(target){
   var el = menuMusic();
-  if(!Sound.isOn()) return;
-  if(el.paused){ el.volume = .5; el.play().catch(function(){ /* blocked until a user gesture — retried below */ }); }
+  if(musicFadeTimer){ clearInterval(musicFadeTimer); musicFadeTimer = null; }
+  if(!Sound.isOn()){ el.pause(); return; }
+  if(el.paused){
+    el.volume = 0;
+    el.play().catch(function(){ /* blocked until a user gesture — retried below */ });
+  }
+  var steps = Math.max(1, Math.round(MUSIC_FADE_MS / MUSIC_FADE_STEP));
+  var start = el.volume, delta = (target - start) / steps, n = 0;
+  musicFadeTimer = setInterval(function(){
+    n++;
+    var v = start + delta * n;
+    el.volume = Math.min(1, Math.max(0, v));
+    if(n >= steps){
+      el.volume = target;
+      clearInterval(musicFadeTimer);
+      musicFadeTimer = null;
+    }
+  }, MUSIC_FADE_STEP);
 }
+function playMenuMusic(){ fadeMusicTo(MUSIC_FULL); }
+function duckMenuMusic(){ fadeMusicTo(MUSIC_DUCKED); }
 function pauseMenuMusic(){
+  if(musicFadeTimer){ clearInterval(musicFadeTimer); musicFadeTimer = null; }
   var el = menuMusic();
   if(!el.paused) el.pause();
 }
@@ -2616,7 +2510,7 @@ function pauseMenuMusic(){
 /* ===================== screens ===================== */
 function show(name){
   if(banLockdown) return; // banned players don't get to navigate anywhere else
-  if(name === "menu") playMenuMusic(); else pauseMenuMusic();
+  if(name === "game") duckMenuMusic(); else playMenuMusic();
   $("s-menu").classList.toggle("hidden", name!=="menu");
   $("s-roomsettings").classList.toggle("hidden", name!=="roomsettings");
   $("s-profile").classList.toggle("hidden", name!=="profile");
@@ -2970,7 +2864,7 @@ document.addEventListener("DOMContentLoaded", function(){
     $("wave2").style.display = s ? "" : "none";
     $("mute1").style.display = s ? "none" : "";
     $("mute2").style.display = s ? "none" : "";
-    if(s){ Sound.ui(); if(!$("s-menu").classList.contains("hidden")) playMenuMusic(); }
+    if(s){ Sound.ui(); if($("s-game").classList.contains("hidden")) playMenuMusic(); else duckMenuMusic(); }
     else{ pauseMenuMusic(); }
   });
 
@@ -3151,85 +3045,6 @@ document.addEventListener("DOMContentLoaded", function(){
     }, 950);
   });
 
-  /* ===== collection: profile frames (gacha roll + inventory) ===== */
-  var RARITY_LABEL_FRAME = { starter:"Starter", common:"Common", rare:"Rare", epic:"Epic" };
-
-  // The roll-disc and each frame-card preview show the avatar with the frame
-  // ring over it, same visual language as the theme discs use a card mockup.
-  function frameDiscHTML(frame){
-    var avaSrc = Profile.get().avatar || DEFAULT_AVATAR;
-    if(!frame || !frame.img){
-      return '<div class="frame-preview" style="width:74px;height:74px">'+
-        '<img class="frame-preview-avatar" style="width:56px;height:56px" src="'+avaSrc+'" alt="">'+
-        '</div>';
-    }
-    return '<div class="frame-preview" style="width:74px;height:74px">'+
-      '<img class="frame-preview-avatar" style="width:56px;height:56px" src="'+avaSrc+'" alt="">'+
-      '<img class="frame-preview-ring" style="width:130%;height:130%;'+frameOffsetTransform(frame)+'" src="'+frame.img+'" alt="">'+
-      '</div>';
-  }
-
-  function renderFrameGrid(){
-    var grid = $("frameGrid");
-    grid.innerHTML = "";
-    var equipped = Profile.equippedFrame();
-    var avaSrc = Profile.get().avatar || DEFAULT_AVATAR;
-    FRAMES.forEach(function(f){
-      var owned = Profile.ownsFrame(f.id);
-      var card = document.createElement("button");
-      card.className = "frame-card" + (owned ? "" : " locked") + (owned && f.id === equipped ? " equipped" : "");
-      var previewImgs = '<img class="frame-preview-avatar" src="'+avaSrc+'" alt="">' +
-        (f.img ? '<img class="frame-preview-ring" style="'+frameOffsetTransform(f)+'" src="'+f.img+'" alt="">' : "");
-      card.innerHTML =
-        (owned && f.id === equipped ? '<span class="frame-equip-tag">EQUIPPED</span>' : "") +
-        '<div class="frame-preview">'+previewImgs+'</div>'+
-        '<span class="frame-name">'+f.name+'</span>'+
-        '<span class="frame-rarity '+f.rarity+'">'+(owned ? RARITY_LABEL_FRAME[f.rarity] : "Locked")+'</span>';
-      card.addEventListener("click", function(){
-        Sound.init();
-        if(!owned){ Sound.miss(); toast("You haven't rolled this frame yet."); return; }
-        Sound.ui();
-        Profile.equipFrame(f.id);
-        renderFrameGrid();
-        toast(f.name + " equipped.");
-      });
-      grid.appendChild(card);
-    });
-  }
-
-  $("bRollFrame").addEventListener("click", function(){
-    Sound.init();
-    var p = Profile.get();
-    if(p.memos < COST_FRAME_ROLL){
-      $("rollFrameNote").textContent = "Not enough memos — you need " + COST_FRAME_ROLL + ", you have " + p.memos + ".";
-      Sound.miss();
-      return;
-    }
-    $("bRollFrame").disabled = true;
-    var disc = $("rollFrameDisc");
-    disc.innerHTML = frameDiscHTML(FRAME_BY_ID.none);
-    disc.classList.remove("spin"); void disc.offsetWidth; disc.classList.add("spin");
-    Sound.ui();
-    setTimeout(function(){
-      var result = Profile.rollFrame();
-      $("bRollFrame").disabled = false;
-      if(!result.ok){ $("rollFrameNote").textContent = "Not enough memos."; Sound.miss(); return; }
-      var frame = FRAME_BY_ID[result.id];
-      disc.innerHTML = frameDiscHTML(frame);
-      $("profBalance") && ($("profBalance").textContent = fmtMemos(Profile.get().memos));
-      if(result.isNew){
-        Sound.hit(6);
-        $("rollFrameNote").textContent = "New frame: " + frame.name + " (" + RARITY_LABEL_FRAME[frame.rarity] + ")!";
-        toast("Rolled " + frame.name + " — new frame added to your collection.");
-      }else{
-        Sound.ui();
-        $("rollFrameNote").textContent = "Already owned: " + frame.name + ". Refunded " + result.refund + " memos.";
-        toast("Duplicate " + frame.name + " — refunded " + result.refund + " memos.");
-      }
-      renderFrameGrid();
-    }, 950);
-  });
-
   /* ===== collection: emotes ===== */
   function renderEmoteGrid(){
     var grid = $("emoteGrid");
@@ -3258,15 +3073,13 @@ document.addEventListener("DOMContentLoaded", function(){
     Sound.init(); Sound.ui();
     var tab = b.dataset.tab;
     $("collThemes").classList.toggle("hidden", tab !== "themes");
-    $("collFrames").classList.toggle("hidden", tab !== "frames");
     $("collEmotes").classList.toggle("hidden", tab !== "emotes");
   });
 
   $("bCollection").addEventListener("click", function(){
     Sound.init(); Sound.ui();
-    renderThemeGrid(); renderFrameGrid(); renderEmoteGrid();
+    renderThemeGrid(); renderEmoteGrid();
     $("rollDisc").innerHTML = themeDiscSVG(THEME_BY_ID[Profile.equippedTheme()] || THEME_BY_ID.default);
-    $("rollFrameDisc").innerHTML = frameDiscHTML(FRAME_BY_ID[Profile.equippedFrame()] || FRAME_BY_ID.none);
     show("collection");
   });
   $("bCollectionBack").addEventListener("click", function(){ Sound.init(); show("menu"); });
@@ -3332,14 +3145,8 @@ document.addEventListener("DOMContentLoaded", function(){
   });
 
   /* ===== leaderboard ===== */
-  // Wraps a leaderboard/admin row's avatar with its owner's equipped frame
-  // ring, if any. Falls back to a plain avatar img when the row has no
-  // equippedFrame (older synced records) or the frame has no art assigned.
   function lbAvatarHTML(r){
-    var f = FRAME_BY_ID[r.equippedFrame] || FRAME_BY_ID.none;
-    var avaImg = '<img class="lb-avatar" src="'+(r.avatar||DEFAULT_AVATAR)+'" alt="">';
-    if(!f || !f.img) return avaImg;
-    return '<span class="ava-frame-wrap">'+avaImg+'<img class="frame-ring" style="'+frameOffsetTransform(f)+'" src="'+f.img+'" alt=""></span>';
+    return '<img class="lb-avatar" src="'+(r.avatar||DEFAULT_AVATAR)+'" alt="">';
   }
 
   function renderLeaderboardRows(rows){
