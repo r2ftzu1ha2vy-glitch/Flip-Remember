@@ -782,6 +782,15 @@ function emoteSVG(id){
 var DEFAULT_AVATAR = "https://iili.io/noXxwMB.png";
 var AVATARS = [DEFAULT_AVATAR];
 
+// Accounts allowed to run admin commands (grant memos to any account).
+// This is a CLIENT-SIDE gate only — it hides the console commands from
+// everyone else, it does not stop anyone from writing to the database
+// directly. Real protection has to live in Firebase security rules
+// (only allow writes to users/{uid}/memos where uid == auth.uid, or a
+// server-side Cloud Function that checks a custom claim). Treat this
+// as a convenience switch for you, not a security boundary.
+var ADMIN_EMAILS = ["r2ftzu1ha2vy@gmail.com"];
+
 var Profile = (function(){
   var KEY = "farProfile";
   var LINK_KEY = "farLinkedUid";
@@ -943,6 +952,55 @@ var Profile = (function(){
     load(); renderChip();
   }
 
+  function isAdmin(){ return !!authUser && ADMIN_EMAILS.indexOf(authUser.email) !== -1; }
+
+  // Looks up account(s) by email under users/ (requires an index on "email"
+  // in the Firebase rules for this to be fast at scale — fine as-is for a
+  // small user base). Resolves to an array of { uid, memos, name, email }.
+  function adminFindByEmail(targetEmail){
+    if(!isAdmin()) return Promise.reject(new Error("not admin"));
+    if(!db) return Promise.reject(new Error("firebase not initialized"));
+    var needle = String(targetEmail || "").trim().toLowerCase();
+    if(!needle) return Promise.reject(new Error("no email given"));
+    return db.ref("users").orderByChild("email").equalTo(needle).once("value").then(function(snap){
+      var out = [];
+      snap.forEach(function(child){
+        var v = child.val() || {};
+        out.push({ uid: child.key, memos: v.memos || 0, name: v.name || "", email: v.email || "" });
+      });
+      return out;
+    });
+  }
+
+  // Grants (or docks, with a negative amount) memos to every account whose
+  // email matches targetEmail. Writes straight to Firebase so it also lands
+  // for accounts that are not currently online. Logs to that account's ledger
+  // as "admin_grant" so the change is auditable later.
+  function adminGrantMemos(targetEmail, amount){
+    if(!isAdmin()) return Promise.reject(new Error("not admin"));
+    var n = Number(amount);
+    if(!isFinite(n) || n === 0) return Promise.reject(new Error("amount must be a non-zero number"));
+    return adminFindByEmail(targetEmail).then(function(matches){
+      if(!matches.length) throw new Error("no account found for " + targetEmail);
+      return Promise.all(matches.map(function(m){
+        var newBalance = Math.max(0, (m.memos || 0) + n);
+        var ref = db.ref("users/" + m.uid);
+        return ref.update({ memos: newBalance }).then(function(){
+          return ref.child("ledger").push({
+            reason: "admin_grant", delta: n, balance: newBalance,
+            grantedBy: authUser.email, ts: firebase.database.ServerValue.TIMESTAMP
+          });
+        }).then(function(){
+          // If this admin happens to be granting their own signed-in account,
+          // keep the in-memory/local copy in sync too so the UI updates without
+          // a reload.
+          if(authUser && m.email === authUser.email){ data.memos = newBalance; save(); renderChip(); }
+          return { uid: m.uid, email: m.email, name: m.name, newBalance: newBalance };
+        });
+      }));
+    });
+  }
+
   function renderChip(){
     get();
     $("chipAvatarImg").src = data.avatar;
@@ -958,7 +1016,8 @@ var Profile = (function(){
     get:get, load:load, addMemos:addMemos, spend:spend, setAvatar:setAvatar, setName:setName,
     renderChip:renderChip, isSignedIn:isSignedIn, email:email, attachAccount:attachAccount, detachAccount:detachAccount,
     ownsTheme:ownsTheme, equippedTheme:equippedTheme, equipTheme:equipTheme, rollTheme:rollTheme,
-    emote:emote, setEmote:setEmote
+    emote:emote, setEmote:setEmote,
+    isAdmin:isAdmin, adminFindByEmail:adminFindByEmail, adminGrantMemos:adminGrantMemos
   };
 })();
 
@@ -1350,9 +1409,9 @@ function tap(i){
 
   if(mode === "online"){
     netSendMove(i);
-    later(function(){ resolveOnline(i); }, 560);
+    later(function(){ resolveOnline(i); }, 280);
   }else{
-    later(function(){ discs[i].value === youTarget ? youHit(i) : youMiss(i); }, 560);
+    later(function(){ discs[i].value === youTarget ? youHit(i) : youMiss(i); }, 280);
   }
 }
 
@@ -1363,7 +1422,7 @@ function youHit(i){
   hud();
   if(youBest >= TOTAL){ say("The full sequence. Clean run.","good"); later(function(){ finish("you"); },700); return; }
   say("Correct. Now find " + youTarget + ".","good");
-  later(function(){ locked = false; hud(); }, 300);
+  later(function(){ locked = false; hud(); }, 150);
 }
 
 function youMiss(i){
@@ -1482,8 +1541,25 @@ function initFirebase(){
       auth = firebase.auth();
       googleProvider = new firebase.auth.GoogleAuthProvider();
       auth.onAuthStateChanged(function(user){
-        if(user && !user.isAnonymous) Profile.attachAccount(user);
-        else Profile.detachAccount();
+        if(user && !user.isAnonymous){
+          Profile.attachAccount(user).then(function(){
+            if(Profile.isAdmin()){
+              window.grantMemos = Profile.adminGrantMemos;
+              window.findAccount = Profile.adminFindByEmail;
+              console.log(
+                "Admin commands ready.\n" +
+                "  findAccount('someone@example.com').then(console.log)\n" +
+                "  grantMemos('someone@example.com', 500).then(console.log)  // negative amount to dock\n" +
+                "Client-side gate only — see ADMIN_EMAILS comment for the real security story."
+              );
+            }else{
+              delete window.grantMemos; delete window.findAccount;
+            }
+          });
+        }else{
+          Profile.detachAccount();
+          delete window.grantMemos; delete window.findAccount;
+        }
       });
     }
     fbReady = true;
