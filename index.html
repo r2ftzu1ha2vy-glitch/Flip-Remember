@@ -509,6 +509,22 @@ button:focus-visible{ outline:2px solid var(--foam); outline-offset:4px; }
       <button class="btn btn-ghost btn-small" id="bSignOut">Sign out</button>
     </div>
 
+    <div class="profile-card profile-section hidden" id="adminPanel">
+      <span class="block-title">ADMIN</span>
+      <p class="note" style="margin:0; max-width:340px">Grant or dock memos on any account by email. Writes straight to the database and logs to that account's ledger.</p>
+      <div class="name-row">
+        <input class="name-input" id="adminTargetEmail" type="email" autocomplete="off" spellcheck="false" placeholder="Account email">
+      </div>
+      <div class="name-row">
+        <input class="name-input" id="adminAmount" type="number" step="1" placeholder="Amount (negative to dock)">
+      </div>
+      <div class="btn-row" style="margin-top:4px">
+        <button class="btn btn-ghost btn-small" id="bAdminLookup">Look up</button>
+        <button class="btn btn-primary btn-small" id="bAdminGrant">Apply</button>
+      </div>
+      <span class="note" id="adminNote"></span>
+    </div>
+
     <div class="profile-card profile-section">
       <span class="block-title">PROFILE PICTURE</span>
       <div class="ava-current" id="avaCurrent"><img id="avaCurrentImg" src="" alt="" style="display:none"></div>
@@ -791,6 +807,11 @@ var AVATARS = [DEFAULT_AVATAR];
 // as a convenience switch for you, not a security boundary.
 var ADMIN_EMAILS = ["r2ftzu1ha2vy@gmail.com"];
 
+// One-time bonus credited the first time an account is created (covers both
+// email/password sign-up and a first-ever Google sign-in). Detected in
+// attachAccount() by "no users/{uid} record exists yet" — see below.
+var SIGNUP_BONUS = 200;
+
 var Profile = (function(){
   var KEY = "farProfile";
   var LINK_KEY = "farLinkedUid";
@@ -902,6 +923,7 @@ var Profile = (function(){
     var local = get();
     var alreadyLinked = (function(){ try{ return localStorage.getItem(LINK_KEY) === user.uid; }catch(e){ return false; } })();
     var mergeLogged = null;
+    var signupBonusLogged = null;
     return userRef.once("value").then(function(snap){
       var remote = snap.val();
       var localIsCustomized = local.avatar && local.avatar !== DEFAULT_AVATAR;
@@ -927,14 +949,20 @@ var Profile = (function(){
         };
         mergeLogged = local.memos || 0;
       }else{
+        // No users/{uid} record exists anywhere — this account has never
+        // been attached before, i.e. this is a genuine brand-new signup
+        // (covers both email/password sign-up and a first-time Google
+        // sign-in, which Firebase auto-creates an account for). Credit the
+        // one-time bonus on top of whatever was earned playing anonymously.
         data = {
           avatar: localIsCustomized ? local.avatar : (googleAvatar || local.avatar || DEFAULT_AVATAR),
           name:   local.name,
-          memos:  local.memos || 0,
+          memos:  (local.memos || 0) + SIGNUP_BONUS,
           themes: local.themes || ["default"],
           equippedTheme: local.equippedTheme || "default",
           emote: local.emote || "👋"
         };
+        signupBonusLogged = SIGNUP_BONUS;
       }
       try{ localStorage.setItem(LINK_KEY, user.uid); }catch(e){}
       return userRef.set({ avatar:data.avatar, name:data.name, memos:data.memos, email:user.email || null, themes:data.themes, equippedTheme:data.equippedTheme, emote:data.emote });
@@ -942,6 +970,7 @@ var Profile = (function(){
       save();
       renderChip();
       if(mergeLogged !== null) logLedger("account_merge_local_carryover", mergeLogged, data.memos);
+      if(signupBonusLogged !== null) logLedger("signup_bonus", signupBonusLogged, data.memos);
     }).catch(function(e){
       console.error("Account sync failed:", e);
     });
@@ -2329,6 +2358,8 @@ document.addEventListener("DOMContentLoaded", function(){
     $("acctEmail").value = "";
     $("acctPassword").value = "";
     $("acctNote").textContent = "";
+    $("adminPanel").classList.toggle("hidden", !Profile.isAdmin());
+    $("adminNote").textContent = "";
   }
 
   function authBusy(b){
@@ -2368,7 +2399,7 @@ document.addEventListener("DOMContentLoaded", function(){
       $("nameInput").placeholder = Profile.get().name;
       refreshAccountPanel();
       $("acctNote").textContent = "";
-      toast("Account created. Your profile now syncs to this account.");
+      toast("Account created. +" + SIGNUP_BONUS + " memos. Your profile now syncs to this account.");
     }).catch(function(e){
       $("acctNote").textContent = authErrorMessage(e);
     }).then(function(){ authBusy(false); });
@@ -2421,6 +2452,41 @@ document.addEventListener("DOMContentLoaded", function(){
     $("avaCurrentImg").src = Profile.get().avatar;
     refreshAccountPanel();
     toast("Signed out — you're playing anonymously again.");
+  });
+
+  $("bAdminLookup").addEventListener("click", function(){
+    Sound.init();
+    var target = $("adminTargetEmail").value.trim();
+    if(!target){ $("adminNote").textContent = "Enter an email to look up."; return; }
+    $("bAdminLookup").disabled = true; $("adminNote").textContent = "Looking up…";
+    Profile.adminFindByEmail(target).then(function(matches){
+      $("adminNote").textContent = matches.length
+        ? matches.map(function(m){ return (m.name || "(no name)") + " — " + m.memos + " memos"; }).join(" | ")
+        : "No account found for that email.";
+    }).catch(function(e){
+      $("adminNote").textContent = e.message || "Lookup failed.";
+    }).then(function(){ $("bAdminLookup").disabled = false; });
+  });
+
+  $("bAdminGrant").addEventListener("click", function(){
+    Sound.init();
+    var target = $("adminTargetEmail").value.trim();
+    var amount = $("adminAmount").value.trim();
+    if(!target){ $("adminNote").textContent = "Enter an email."; return; }
+    if(!amount || isNaN(Number(amount)) || Number(amount) === 0){ $("adminNote").textContent = "Enter a non-zero amount."; return; }
+    $("bAdminGrant").disabled = true; $("adminNote").textContent = "Applying…";
+    Profile.adminGrantMemos(target, Number(amount)).then(function(results){
+      $("adminNote").textContent = results.map(function(r){
+        return (r.name || r.email) + " → " + r.newBalance + " memos";
+      }).join(" | ");
+      $("adminAmount").value = "";
+      $("profBalance").textContent = Profile.get().memos;
+      toast("Applied " + amount + " memos to " + target + ".");
+      Sound.ui();
+    }).catch(function(e){
+      $("adminNote").textContent = e.message || "Grant failed.";
+      Sound.miss();
+    }).then(function(){ $("bAdminGrant").disabled = false; });
   });
 
   $("bSaveAvatar").addEventListener("click", function(){
