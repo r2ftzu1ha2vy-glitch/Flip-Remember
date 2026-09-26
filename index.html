@@ -2184,7 +2184,10 @@ function createRoom(maxPlayers){
     };
     return room.ref.set(payload);
   }).then(function(){
-    room.ref.child("p1/online").onDisconnect().set(false);
+    // host is the room's owner — if the host's connection drops (tab closed,
+    // browser killed, network dies) with no chance to run detachRoom(), the
+    // whole room goes with it instead of waiting for the 20-minute sweep.
+    room.ref.onDisconnect().remove();
     $("lobbyCode").textContent = room.code;
     renderLobby({ maxPlayers:maxPlayers, p1: blankSide(false) }, maxPlayers);
     show("lobby");
@@ -2243,7 +2246,10 @@ function claimSlot(ref, code, candidates, idx, max){
     room.bots = {}; room.botMoving = false; room.lastData = null;
     room.ref = ref;
     started = false;
-    ref.child(slot+"/online").onDisconnect().set(false);
+    // if this player's connection drops with no chance to run detachRoom(),
+    // drop their whole slot (claimSlot already treats a missing slot as
+    // free) rather than leaving a dead "online:false" entry behind.
+    ref.child(slot).onDisconnect().remove();
     Sound.join();
 
     return ref.once("value").then(function(freshSnap){
@@ -2296,14 +2302,43 @@ function netErr(){
 
 function attachRoom(){ if(room.ref){ room.ref.on("value", onRoom); attachChat(); } }
 
+// Any online human slot besides my own still present in the last snapshot
+// we saw. Bots don't count — they have no client of their own, so a room
+// held up only by bots is effectively empty.
+function otherHumanOnline(d, myRole){
+  if(!d) return false;
+  for(var n=1;n<=6;n++){
+    var key = "p"+n;
+    if(key === myRole) continue;
+    var s = d[key];
+    if(s && s.online && !s.isBot) return true;
+  }
+  return false;
+}
+
 function detachRoom(){
   if(room.ref){
+    var ref = room.ref, role = room.role, wasHost = (role === "p1"), lastData = room.lastData;
     room.ref.off();
     detachChat();
     try{
-      room.ref.child(room.role+"/online").onDisconnect().cancel();
-      room.ref.child(room.role+"/online").set(false);
-    }catch(e){}
+      if(wasHost) ref.onDisconnect().cancel();
+      else ref.child(role).onDisconnect().cancel();
+      if(wasHost){
+        // host owns the room — leaving takes it down for everyone. Players
+        // still in it are already handled: onRoom sees the room vanish and
+        // routes them back to the menu with "The room was closed."
+        ref.remove().catch(function(e){ console.error("Room delete failed on leave:", e); });
+      }else if(otherHumanOnline(lastData, role)){
+        // other real players remain — just free my slot so someone new can
+        // claim it (claimSlot already treats a missing key as an open slot).
+        ref.child(role).remove().catch(function(e){ console.error("Slot clear failed on leave:", e); });
+      }else{
+        // I was the last human left (everyone else is a bot or already
+        // gone) — no point leaving the room to rot for 20 minutes.
+        ref.remove().catch(function(e){ console.error("Room delete failed on leave:", e); });
+      }
+    }catch(e){ console.error("detachRoom cleanup failed:", e); }
   }
   room = { code:null, role:null, ref:null, seenMove:0, seenResult:0, rematchMine:false, bots:{}, botMoving:false, lastData:null };
 }
