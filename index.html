@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1, user-scalable=no">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1, user-scalable=no, viewport-fit=cover">
 <title>Flip &amp; Remember</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -33,7 +33,8 @@ html,body{ margin:0; min-height:100%; background:var(--abyss); color:var(--text)
 .mote{ animation:rise linear infinite; }
 @keyframes rise{ from{transform:translateY(0);opacity:0} 15%{opacity:.5} 85%{opacity:.35} to{transform:translateY(-120px);opacity:0} }
 
-#app{ position:relative; z-index:1; min-height:100vh; display:flex; flex-direction:column; align-items:center; padding:28px 18px 48px; }
+#app{ position:relative; z-index:1; min-height:100vh; display:flex; flex-direction:column; align-items:center;
+  padding:calc(28px + env(safe-area-inset-top,0px)) calc(18px + env(safe-area-inset-right,0px)) calc(48px + env(safe-area-inset-bottom,0px)) calc(18px + env(safe-area-inset-left,0px)); }
 .screen{ width:100%; max-width:880px; display:flex; flex-direction:column; align-items:center; animation:enter .6s cubic-bezier(.16,.84,.28,1); }
 @keyframes enter{ from{opacity:0;transform:translateY(16px);filter:blur(4px)} to{opacity:1;transform:none;filter:blur(0)} }
 .hidden{ display:none !important; }
@@ -193,7 +194,7 @@ button:focus-visible{ outline:2px solid var(--foam); outline-offset:4px; }
 .petal{ position:fixed; top:-30px; z-index:70; pointer-events:none; animation:fall linear forwards; }
 @keyframes fall{ 0%{transform:translateY(0) rotate(0);opacity:0} 10%{opacity:.75} 100%{transform:translateY(108vh) rotate(320deg);opacity:0} }
 
-.top-bar{ position:fixed; top:18px; left:18px; right:18px; z-index:50; display:flex; align-items:center; justify-content:space-between; gap:10px; }
+.top-bar{ position:fixed; top:calc(18px + env(safe-area-inset-top,0px)); left:calc(18px + env(safe-area-inset-left,0px)); right:calc(18px + env(safe-area-inset-right,0px)); z-index:50; display:flex; align-items:center; justify-content:space-between; gap:10px; }
 
 .audio-btn{ position:static; z-index:50; width:40px; height:40px; border-radius:50%; flex:0 0 auto;
   background:rgba(255,255,255,.03); border:1px solid var(--line); display:flex; align-items:center; justify-content:center;
@@ -341,6 +342,80 @@ button:focus-visible{ outline:2px solid var(--foam); outline-offset:4px; }
 .ban-badge{ display:inline-flex; align-items:center; padding:2px 8px; border-radius:999px; font-size:.6rem; font-weight:500; letter-spacing:.1em; text-transform:uppercase; color:var(--coral); background:rgba(224,138,138,.12); border:1px solid rgba(224,138,138,.3); white-space:nowrap; flex:0 0 auto; }
 .lb-name{ display:flex; align-items:center; gap:7px; }
 .profile-chip-name{ display:flex; align-items:center; gap:6px; }
+
+/* ===== multiplayer grid (3+ players) — everyone gets an equal-size card
+   instead of two big panels plus a strip of tiny chips ===== */
+.roster-strip.multi-grid{
+  display:grid; grid-template-columns:repeat(auto-fit,minmax(118px,1fr));
+  gap:10px; width:100%; max-width:640px; margin-top:0;
+}
+.mp-card{ display:flex; flex-direction:column; align-items:center; gap:8px; padding:14px 10px;
+  border-radius:18px; background:rgba(255,255,255,.028); border:1px solid var(--line); backdrop-filter:blur(10px);
+  transition:border-color .4s,box-shadow .4s,background .4s,opacity .4s; min-width:0; }
+.mp-card.turn{ background:rgba(255,255,255,.055); border-color:rgba(154,168,224,.4); box-shadow:0 0 28px rgba(154,168,224,.14); }
+.mp-card.you{ border-color:rgba(127,216,196,.35); }
+.mp-card.you.turn{ border-color:rgba(127,216,196,.45); box-shadow:0 0 28px rgba(127,216,196,.16); }
+.mp-card.gone{ opacity:.4; }
+.mp-card.bot .mp-name{ opacity:.85; }
+.mp-ring{ position:relative; flex:0 0 auto; width:46px; height:46px; }
+.mp-ring svg{ width:100%; height:100%; }
+.mp-count{ position:absolute; inset:0; display:flex; align-items:center; justify-content:center; font-size:.92rem; font-weight:400; }
+.mp-avatar{ position:absolute; width:16px; height:16px; border-radius:50%; object-fit:cover; bottom:-2px; right:-2px;
+  border:2px solid var(--abyss); background:var(--slate); }
+.mp-meta{ display:flex; flex-direction:column; align-items:center; gap:2px; min-width:0; max-width:100%; }
+.mp-name{ font-size:.7rem; letter-spacing:.1em; color:var(--text-soft); max-width:100%; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.mp-card.you .mp-name{ color:var(--foam); }
+.mp-card.turn .mp-name{ color:var(--text); }
+.mp-sub{ font-size:.68rem; color:var(--text-dim); }
+@media (max-width:480px){
+  .roster-strip.multi-grid{ grid-template-columns:repeat(auto-fit,minmax(92px,1fr)); gap:8px; }
+  .mp-card{ padding:10px 6px; gap:6px; }
+  .mp-ring{ width:40px; height:40px; }
+  .mp-name{ font-size:.64rem; }
+  .mp-sub{ font-size:.6rem; }
+}
+
+/* ===== chat ===== */
+.chat-fab{ position:fixed; right:calc(18px + env(safe-area-inset-right,0px)); bottom:calc(18px + env(safe-area-inset-bottom,0px));
+  z-index:55; width:52px; height:52px; border-radius:50%; display:flex; align-items:center; justify-content:center;
+  background:rgba(255,255,255,.05); border:1px solid var(--line-strong); color:var(--text-soft); backdrop-filter:blur(10px);
+  box-shadow:0 8px 26px rgba(0,0,0,.35); transition:transform .2s ease, color .3s, border-color .3s; }
+.chat-fab:hover{ color:var(--text); border-color:var(--foam); }
+.chat-fab:active{ transform:scale(.94); }
+.chat-fab svg{ width:22px; height:22px; }
+.chat-badge{ position:absolute; top:-4px; right:-4px; min-width:18px; height:18px; padding:0 4px; border-radius:999px;
+  background:var(--foam); color:var(--abyss); font-size:.66rem; font-weight:600; display:flex; align-items:center; justify-content:center; line-height:1; }
+.chat-panel{ position:fixed; z-index:56; right:calc(18px + env(safe-area-inset-right,0px)); bottom:calc(82px + env(safe-area-inset-bottom,0px));
+  width:320px; max-width:calc(100vw - 36px); height:420px; max-height:min(70vh,420px);
+  display:flex; flex-direction:column; border-radius:22px; overflow:hidden;
+  background:linear-gradient(165deg,rgba(21,49,61,.97),rgba(12,28,38,.97)); border:1px solid var(--line-strong);
+  box-shadow:0 30px 70px rgba(0,0,0,.5); transform:translateY(12px) scale(.98); opacity:0; pointer-events:none;
+  transition:opacity .25s ease, transform .25s cubic-bezier(.16,.84,.28,1); }
+.chat-panel.open{ opacity:1; transform:none; pointer-events:auto; }
+.chat-head{ display:flex; align-items:center; justify-content:space-between; padding:14px 16px; border-bottom:1px solid var(--line); flex:0 0 auto; }
+.chat-head h3{ margin:0; font-weight:400; font-size:.85rem; letter-spacing:.14em; color:var(--text-soft); }
+.chat-close{ width:28px; height:28px; border-radius:50%; display:flex; align-items:center; justify-content:center; color:var(--text-dim); background:rgba(255,255,255,.04); }
+.chat-close:hover{ color:var(--text); }
+.chat-messages{ flex:1 1 auto; overflow-y:auto; padding:12px 14px; display:flex; flex-direction:column; gap:8px; -webkit-overflow-scrolling:touch; }
+.chat-empty{ color:var(--text-dim); font-size:.8rem; text-align:center; margin-top:auto; margin-bottom:auto; }
+.chat-msg{ max-width:82%; padding:8px 12px; border-radius:14px; font-size:.84rem; line-height:1.4; word-break:break-word; background:rgba(255,255,255,.05); align-self:flex-start; }
+.chat-msg .chat-msg-name{ display:block; font-size:.64rem; letter-spacing:.08em; color:var(--text-dim); margin-bottom:2px; }
+.chat-msg.mine{ align-self:flex-end; background:rgba(127,216,196,.16); }
+.chat-msg.mine .chat-msg-name{ color:var(--foam); }
+.chat-msg.bot .chat-msg-name{ opacity:.8; }
+.chat-input-row{ display:flex; gap:8px; padding:10px 12px; border-top:1px solid var(--line); flex:0 0 auto;
+  padding-bottom:calc(10px + env(safe-area-inset-bottom,0px)); }
+.chat-input{ flex:1; min-width:0; padding:10px 14px; border-radius:999px; background:rgba(255,255,255,.04);
+  border:1px solid var(--line); color:var(--text); font-family:inherit; font-size:.85rem; outline:none; transition:border-color .3s; }
+.chat-input:focus{ border-color:rgba(127,216,196,.5); }
+.chat-send{ width:38px; height:38px; border-radius:50%; flex:0 0 auto; background:linear-gradient(105deg,var(--foam),#a4e6d8);
+  color:var(--abyss); display:flex; align-items:center; justify-content:center; }
+.chat-send:active{ transform:scale(.92); }
+.chat-send svg{ width:17px; height:17px; }
+@media (max-width:480px){
+  .chat-panel{ right:10px; left:10px; width:auto; max-width:none; bottom:calc(80px + env(safe-area-inset-bottom,0px)); height:min(60vh,460px); max-height:60vh; }
+  .chat-fab{ right:calc(14px + env(safe-area-inset-right,0px)); }
+}
 </style>
 </head>
 <body>
@@ -744,6 +819,27 @@ button:focus-visible{ outline:2px solid var(--foam); outline-offset:4px; }
     <div class="btn-row" style="margin-top:36px; margin-bottom:20px">
       <button class="btn btn-ghost" id="bAdminBack">Back</button>
     </div>
+  </div>
+</div>
+
+<!-- ===== CHAT (multiplayer rooms only) ===== -->
+<button class="chat-fab hidden" id="bChatFab" aria-label="Open chat">
+  <svg viewBox="0 0 24 24" fill="none"><path d="M4 5.5A2.5 2.5 0 0 1 6.5 3h11A2.5 2.5 0 0 1 20 5.5v8A2.5 2.5 0 0 1 17.5 16H10l-4.5 3.8a.6.6 0 0 1-1-.46V16H6.5A2.5 2.5 0 0 1 4 13.5v-8Z" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/></svg>
+  <span class="chat-badge hidden" id="chatBadge">0</span>
+</button>
+<div class="chat-panel" id="chatPanel">
+  <div class="chat-head">
+    <h3>ROOM CHAT</h3>
+    <button class="chat-close" id="bChatClose" aria-label="Close chat">
+      <svg viewBox="0 0 24 24" fill="none" width="14" height="14"><path d="M5 5l14 14M19 5 5 19" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
+    </button>
+  </div>
+  <div class="chat-messages" id="chatMessages"><p class="chat-empty">No messages yet — say hi.</p></div>
+  <div class="chat-input-row">
+    <input class="chat-input" id="chatInput" type="text" placeholder="Message…" maxlength="200" autocomplete="off">
+    <button class="chat-send" id="bChatSend" aria-label="Send">
+      <svg viewBox="0 0 24 24" fill="none"><path d="M4 12l16-8-6 16-3-6-7-2Z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round" stroke-linecap="round"/></svg>
+    </button>
   </div>
 </div>
 
@@ -1432,6 +1528,13 @@ var room = { code:null, role:null, ref:null, seenMove:0, seenResult:0, rematchMi
 var pendingRoomSize = 2;
 var onEmoteReceived = function(d){}; // wired up in DOMContentLoaded, called from onRoom
 var resetEmoteBubbles = function(){}; // wired up in DOMContentLoaded, called from startOnlineGame
+
+/* room chat: real implementations wired up in DOMContentLoaded, hooked from
+   attachRoom/detachRoom/show so they work the same for host and joiners */
+var chatOpen = false, chatUnread = 0;
+var attachChat = function(){};
+var detachChat = function(){};
+var closeChat = function(){};
 
 function $(id){ return document.getElementById(id); }
 function escapeHtml(s){ return String(s==null?"":s).replace(/[&<>"']/g, function(c){ return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]; }); }
@@ -2191,11 +2294,12 @@ function netErr(){
   toast("Firebase isn't configured yet — add your config at the top of the file.", true);
 }
 
-function attachRoom(){ if(room.ref) room.ref.on("value", onRoom); }
+function attachRoom(){ if(room.ref){ room.ref.on("value", onRoom); attachChat(); } }
 
 function detachRoom(){
   if(room.ref){
     room.ref.off();
+    detachChat();
     try{
       room.ref.child(room.role+"/online").onDisconnect().cancel();
       room.ref.child(room.role+"/online").set(false);
@@ -2232,23 +2336,54 @@ function renderLobby(d, maxPlayers){
   if(showBots) $("bPlayWithBots").textContent = "Play with " + need + " bot" + (need === 1 ? "" : "s");
 }
 
-/* compact strip of every other participant, shown during multiplayer games with 3+ players */
+/* game-screen player display: the classic head-to-head "you VS foe" panels
+   work great for exactly 2 players, but with 3+ it used to leave you and
+   whoever's spotlighted looking big while everyone else was squeezed into a
+   strip of tiny chips. For 3+ players, replace both with a single grid where
+   every participant — including you — gets an equal-size card. */
 function renderGameRoster(d){
   var el = $("gameRoster");
+  var statusRow = document.querySelector(".status-row");
   if(!el) return;
   var max = d.maxPlayers || 2;
-  if(max <= 2){ el.classList.add("hidden"); el.innerHTML = ""; return; }
+  if(max <= 2){
+    el.classList.add("hidden"); el.classList.remove("multi-grid"); el.innerHTML = "";
+    if(statusRow) statusRow.classList.remove("hidden");
+    return;
+  }
+  if(statusRow) statusRow.classList.add("hidden");
+  el.classList.add("multi-grid");
   el.innerHTML = "";
+  var RC = 19, CIRC = 2*Math.PI*RC;
   for(var n=1;n<=max;n++){
     var k = "p"+n;
-    if(k === room.role) continue;
     var s = d[k];
     if(!s) continue;
-    var chip = document.createElement("div");
-    chip.className = "roster-chip" + (s.isBot ? " bot" : "") + (d.turn === k ? " on" : "");
-    chip.style.borderColor = (d.turn === k) ? "var(--line-strong)" : "";
-    chip.innerHTML = '<img src="'+(s.avatar||DEFAULT_AVATAR)+'" alt=""><span>'+(s.name||k)+'</span> <b>'+(s.progress||0)+'/'+TOTAL+'</b>';
-    el.appendChild(chip);
+    var isMe = (k === room.role);
+    var progress = s.progress || 0, target = s.target || 1;
+    var pct = TOTAL ? Math.max(0, Math.min(1, progress/TOTAL)) : 0;
+    var off = (CIRC * (1 - pct)).toFixed(1);
+    var stroke = isMe ? "#7fd8c4" : "#9aa8e0";
+    var card = document.createElement("div");
+    card.className = "mp-card" +
+      (isMe ? " you" : "") +
+      (s.isBot ? " bot" : "") +
+      (d.turn === k ? " turn" : "") +
+      ((s.online === false && !s.isBot) ? " gone" : "");
+    card.innerHTML =
+      '<div class="mp-ring"><svg viewBox="0 0 44 44">' +
+        '<circle cx="22" cy="22" r="'+RC+'" fill="none" stroke="rgba(255,255,255,.08)" stroke-width="3"/>' +
+        '<circle cx="22" cy="22" r="'+RC+'" fill="none" stroke="'+stroke+'" stroke-width="3" stroke-linecap="round" ' +
+          'transform="rotate(-90 22 22)" stroke-dasharray="'+CIRC.toFixed(1)+'" stroke-dashoffset="'+off+'" ' +
+          'style="transition:stroke-dashoffset .6s cubic-bezier(.16,.84,.28,1)"/>' +
+      '</svg><span class="mp-count">'+progress+'</span>' +
+      '<img class="mp-avatar" src="'+(s.avatar||DEFAULT_AVATAR)+'" alt="">' +
+      '</div>' +
+      '<div class="mp-meta">' +
+        '<span class="mp-name">'+escapeHtml(isMe ? "YOU" : (s.name || k))+'</span>' +
+        '<span class="mp-sub">'+(progress >= TOTAL ? "Complete" : "Seeking " + target)+'</span>' +
+      '</div>';
+    el.appendChild(card);
   }
   el.classList.remove("hidden");
 }
@@ -2446,7 +2581,16 @@ function maybeBotMove(d){
       up["result"] = { slot:pick, by:turnSlot, kind:"miss", value:val, seq:seq };
       up["turn"] = nextSlot(d, turnSlot);
     }
-    room.ref.update(up).then(function(){ room.botMoving = false; }).catch(function(){ room.botMoving = false; });
+    room.ref.update(up).then(function(){
+      room.botMoving = false;
+      // Firebase applies writes locally (and fires the "value" listener) before
+      // this promise resolves, so if the next turn also belongs to a bot, the
+      // maybeBotMove(d) call that listener triggered may have already run and
+      // bailed out because room.botMoving was still true — which would leave
+      // that bot's turn stuck forever with nothing left to retrigger it.
+      // Re-check the latest snapshot now that the flag is clear to pick it up.
+      if(room.role === "p1") later(function(){ maybeBotMove(room.lastData || d); }, 20);
+    }).catch(function(){ room.botMoving = false; });
   }, cfg.tMin + Math.random()*(cfg.tMax-cfg.tMin));
 }
 
@@ -2751,6 +2895,9 @@ function show(name){
   $("s-collection").classList.toggle("hidden", name!=="collection");
   $("s-leaderboard").classList.toggle("hidden", name!=="leaderboard");
   $("s-admin").classList.toggle("hidden", name!=="admin");
+  var chatEligible = mode === "online" && (name === "lobby" || name === "game" || name === "end");
+  $("bChatFab").classList.toggle("hidden", !chatEligible);
+  if(!chatEligible) closeChat();
 }
 
 function updateCountTexts(){
@@ -2774,6 +2921,11 @@ function newSolo(){
   $("pFoeAvatar").classList.remove("on");
   $("roomTag").classList.add("hidden");
   $("pFoe").classList.remove("gone");
+  var statusRow = document.querySelector(".status-row");
+  if(statusRow) statusRow.classList.remove("hidden");
+  $("gameRoster").classList.add("hidden");
+  $("gameRoster").classList.remove("multi-grid");
+  $("gameRoster").innerHTML = "";
   updateCountTexts();
   $("emoteWrap").classList.add("hidden");
   hud(); show("game");
@@ -3457,6 +3609,72 @@ document.addEventListener("DOMContentLoaded", function(){
     if(!pop || pop.classList.contains("hidden")) return;
     if(e.target === $("bEmote") || pop.contains(e.target)) return;
     pop.classList.add("hidden");
+  });
+
+  /* ===== room chat (multiplayer only) ===== */
+  function resetChatUI(){
+    $("chatMessages").innerHTML = '<p class="chat-empty">No messages yet — say hi.</p>';
+    chatUnread = 0;
+    $("chatBadge").classList.add("hidden");
+  }
+  function renderChatMessage(m){
+    var el = $("chatMessages");
+    var empty = el.querySelector(".chat-empty");
+    if(empty) empty.remove();
+    var mine = m.by === room.role;
+    var div = document.createElement("div");
+    div.className = "chat-msg" + (mine ? " mine" : "") + (m.isBot ? " bot" : "");
+    div.innerHTML = '<span class="chat-msg-name">' + escapeHtml(mine ? "You" : (m.name || "Player")) + '</span>' + escapeHtml(m.text || "");
+    el.appendChild(div);
+    el.scrollTop = el.scrollHeight;
+  }
+  function chatChildAdded(snap){
+    var m = snap.val();
+    if(!m) return;
+    renderChatMessage(m);
+    if(!chatOpen && m.by !== room.role){
+      chatUnread++;
+      var b = $("chatBadge");
+      b.textContent = chatUnread > 9 ? "9+" : String(chatUnread);
+      b.classList.remove("hidden");
+    }
+  }
+  attachChat = function(){
+    if(!room.ref) return;
+    resetChatUI();
+    room.ref.child("chat").limitToLast(50).on("child_added", chatChildAdded);
+  };
+  detachChat = function(){
+    if(room.ref){ try{ room.ref.child("chat").off("child_added", chatChildAdded); }catch(e){} }
+    resetChatUI();
+  };
+  closeChat = function(){
+    $("chatPanel").classList.remove("open");
+    chatOpen = false;
+  };
+  function openChat(){
+    $("chatPanel").classList.add("open");
+    chatOpen = true;
+    chatUnread = 0;
+    $("chatBadge").classList.add("hidden");
+    $("chatInput").focus();
+  }
+  function sendChatMessage(){
+    var input = $("chatInput");
+    var text = input.value.trim();
+    if(!text || !room.ref) return;
+    var p = Profile.get();
+    room.ref.child("chat").push({ by: room.role, name: p.name || "Player", text: text.slice(0,200), ts: Date.now() }).catch(function(){});
+    input.value = "";
+  }
+  $("bChatFab").addEventListener("click", function(){
+    Sound.init(); Sound.ui();
+    if($("chatPanel").classList.contains("open")) closeChat(); else openChat();
+  });
+  $("bChatClose").addEventListener("click", function(){ Sound.init(); closeChat(); });
+  $("bChatSend").addEventListener("click", function(){ Sound.init(); sendChatMessage(); });
+  $("chatInput").addEventListener("keydown", function(e){
+    if(e.key === "Enter"){ e.preventDefault(); sendChatMessage(); }
   });
 
   /* ===== leaderboard ===== */
