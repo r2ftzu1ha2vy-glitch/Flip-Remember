@@ -2500,10 +2500,19 @@ function onRoom(snap){
   var foeSlot = spotlightSlot(d);
   var foe = d[foeSlot];
 
-  /* opponent presence */
-  if(foe && foe.online === false && !foe.isBot && !over){
+  /* opponent presence — if a human opponent leaves mid-match, the match is
+     over for everyone still in the room, not just paused. The player who
+     detects it (their onDisconnect already cleared their own slot) tears
+     the whole room down rather than leaving remaining players staring at
+     a frozen board or a room that lingers for the 20-minute sweep. */
+  if(foe && foe.online === false && !foe.isBot && !over && d.status === "playing"){
     $("pFoe").classList.add("gone");
-    say("Your opponent disconnected.","bad");
+    say("Your opponent disconnected — match ended.","bad");
+    toast("Opponent left the match.", true);
+    over = true;
+    if(room.ref){ room.ref.remove().catch(function(e){ console.error("Room delete failed after opponent left:", e); }); }
+    later(function(){ goMenu(); }, 1200);
+    return;
   }else{
     $("pFoe").classList.remove("gone");
   }
@@ -3749,6 +3758,46 @@ document.addEventListener("DOMContentLoaded", function(){
     return { test:containsProfanity, censor:censor };
   })();
 
+  // Filter-strike tracking + temporary chat suspension. Both are enforced
+  // client-side only (see the Filter note above — same caveat applies:
+  // this stops normal play, not a determined rule-breaker in devtools).
+  var STRIKE_KEY = "df_chat_strikes";
+  var SUSPEND_KEY = "df_chat_suspend_until";
+  var STRIKE_LIMIT = 10;
+  var SUSPEND_MS = 60 * 1000;
+
+  function getStrikes(){
+    try{ return parseInt(localStorage.getItem(STRIKE_KEY) || "0", 10) || 0; }catch(e){ return 0; }
+  }
+  function setStrikes(n){
+    try{ localStorage.setItem(STRIKE_KEY, String(n)); }catch(e){}
+  }
+  function getSuspendedUntil(){
+    try{ return parseInt(localStorage.getItem(SUSPEND_KEY) || "0", 10) || 0; }catch(e){ return 0; }
+  }
+  function setSuspendedUntil(ts){
+    try{ localStorage.setItem(SUSPEND_KEY, String(ts)); }catch(e){}
+  }
+  function isChatSuspended(){
+    return Date.now() < getSuspendedUntil();
+  }
+  function chatSuspendSecondsLeft(){
+    return Math.max(0, Math.ceil((getSuspendedUntil() - Date.now()) / 1000));
+  }
+  // Call after a message got censored. Bumps the strike count and, once it
+  // crosses the limit, suspends chat for SUSPEND_MS and resets the counter
+  // so the next offense starts a fresh count.
+  function registerFilterStrike(){
+    var n = getStrikes() + 1;
+    if(n >= STRIKE_LIMIT){
+      setSuspendedUntil(Date.now() + SUSPEND_MS);
+      setStrikes(0);
+      return true; // just tripped the suspension
+    }
+    setStrikes(n);
+    return false;
+  }
+
   function resetChatUI(){
     $("chatMessages").innerHTML = '<p class="chat-empty">No messages yet — say hi.</p>';
     chatUnread = 0;
@@ -3803,6 +3852,10 @@ document.addEventListener("DOMContentLoaded", function(){
     var input = $("chatInput");
     var text = input.value.trim();
     if(!text || !room.ref) return;
+    if(isChatSuspended()){
+      toast("Chat suspended for " + chatSuspendSecondsLeft() + "s for repeated language violations.", true);
+      return;
+    }
     var now = Date.now();
     if(now - chatLastSentAt < CHAT_COOLDOWN_MS){
       toast("Sending too fast — slow down.");
@@ -3815,7 +3868,15 @@ document.addEventListener("DOMContentLoaded", function(){
     if(!text) return;
     chatLastSentAt = now;
     var clean = Filter.censor(text);
-    if(clean !== text) toast("Watch the language — message filtered.");
+    if(clean !== text){
+      var justSuspended = registerFilterStrike();
+      if(justSuspended){
+        toast("Too many filtered messages — chat suspended for 1 minute.", true);
+        input.value = "";
+        return; // the offending message itself is dropped, not sent censored
+      }
+      toast("Watch the language — message filtered.");
+    }
     var p = Profile.get();
     room.ref.child("chat").push({ by: room.role, name: p.name || "Player", text: clean, ts: Date.now() }).catch(function(){});
     input.value = "";
