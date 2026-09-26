@@ -3647,6 +3647,62 @@ document.addEventListener("DOMContentLoaded", function(){
   });
 
   /* ===== room chat (multiplayer only) ===== */
+  // Client-side profanity filter. This is a courtesy filter, not a security
+  // boundary — anyone editing the page's JS in devtools can bypass it, same
+  // as every other client-side chat filter. It exists to keep normal play
+  // clean, not to stop someone determined to be a jerk.
+  var Filter = (function(){
+    var WORDS = [
+      "fuck","shit","bitch","asshole","bastard","dick","piss","cunt",
+      "cock","pussy","whore","slut","douche","twat","wank","bollocks",
+      "nigger","nigga","faggot","retard"
+    ];
+
+    // common leetspeak substitutions, so "fuuuck", "f4ck" and "sh1t" still hit
+    var LEET = { "0":"o","1":"i","3":"e","4":"a","5":"s","7":"t","@":"a","$":"s" };
+
+    function normalize(s){
+      var out = "";
+      s = s.toLowerCase();
+      for(var i=0;i<s.length;i++) out += LEET[s[i]] || s[i];
+      return out;
+    }
+
+    function escapeRe(ch){ return ch.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"); }
+
+    // for each word, letters can repeat ("fuuuck") and non-letter junk can
+    // be wedged between them ("f.u.c.k", "f_u-c*k") to dodge a plain match
+    var body = WORDS.map(function(w){
+      return w.split("").map(function(ch, i, arr){
+        var unit = escapeRe(ch) + "+";
+        return i < arr.length - 1 ? unit + "[\\W_]*" : unit;
+      }).join("");
+    }).join("|");
+    var RE = new RegExp("\\b(?:" + body + ")\\b", "gi");
+
+    function containsProfanity(text){
+      RE.lastIndex = 0;
+      return RE.test(normalize(text));
+    }
+
+    // match against the normalized copy (same length as the original, since
+    // LEET is a 1:1 char swap) but blank out the corresponding span of the
+    // *original* string, so real casing/punctuation survive around the mask
+    function censor(text){
+      var norm = normalize(text);
+      var out = text.split("");
+      RE.lastIndex = 0;
+      var m;
+      while((m = RE.exec(norm)) !== null){
+        for(var i=m.index; i<RE.lastIndex; i++) out[i] = "*";
+        if(m.index === RE.lastIndex) RE.lastIndex++; // guard against zero-length matches
+      }
+      return out.join("");
+    }
+
+    return { test:containsProfanity, censor:censor };
+  })();
+
   function resetChatUI(){
     $("chatMessages").innerHTML = '<p class="chat-empty">No messages yet — say hi.</p>';
     chatUnread = 0;
@@ -3698,8 +3754,11 @@ document.addEventListener("DOMContentLoaded", function(){
     var input = $("chatInput");
     var text = input.value.trim();
     if(!text || !room.ref) return;
+    text = text.slice(0,200);
+    var clean = Filter.censor(text);
+    if(clean !== text) toast("Watch the language — message filtered.");
     var p = Profile.get();
-    room.ref.child("chat").push({ by: room.role, name: p.name || "Player", text: text.slice(0,200), ts: Date.now() }).catch(function(){});
+    room.ref.child("chat").push({ by: room.role, name: p.name || "Player", text: clean, ts: Date.now() }).catch(function(){});
     input.value = "";
   }
   $("bChatFab").addEventListener("click", function(){
