@@ -3899,7 +3899,22 @@ document.addEventListener("DOMContentLoaded", function(){
       Profile.registerFilterStrike().then(function(justSuspended){
         if(justSuspended){
           toast("Too many filtered messages — suspended from online play for 1 minute.", true);
-          detachRoom(); // suspension takes effect immediately, mid-match included
+          // A suspension always ends the match for everyone in the room,
+          // not just frees this player's slot the way a normal leave would
+          // (detachRoom's "other humans remain" branch would otherwise just
+          // open the slot for a new joiner mid-game, which is wrong here).
+          // Delete the whole room directly, then let detachRoom() run its
+          // usual listener/chat teardown without letting it re-decide what
+          // to do with the room (it would try to only free the slot).
+          var ref = room.ref;
+          room.ref.off();
+          detachChat();
+          try{
+            if(room.role === "p1") ref.onDisconnect().cancel();
+            else ref.child(room.role).onDisconnect().cancel();
+          }catch(e){}
+          if(ref){ ref.remove().catch(function(e){ console.error("Room delete failed on suspension:", e); }); }
+          room = { code:null, role:null, ref:null, seenMove:0, seenResult:0, rematchMine:false, bots:{}, botMoving:false, lastData:null };
           goMenu();
         }else{
           toast("Watch the language — message filtered.");
