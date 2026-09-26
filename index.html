@@ -340,6 +340,7 @@ button:focus-visible{ outline:2px solid var(--foam); outline-offset:4px; }
 .admin-grant-note{ font-size:.78rem; color:var(--text-dim); padding:0 16px 8px 16px; }
 .title-badge{ display:inline-flex; align-items:center; padding:2px 8px; border-radius:999px; font-size:.6rem; font-weight:500; letter-spacing:.1em; text-transform:uppercase; color:var(--sand); background:rgba(230,211,163,.12); border:1px solid rgba(230,211,163,.3); white-space:nowrap; flex:0 0 auto; }
 .ban-badge{ display:inline-flex; align-items:center; padding:2px 8px; border-radius:999px; font-size:.6rem; font-weight:500; letter-spacing:.1em; text-transform:uppercase; color:var(--coral); background:rgba(224,138,138,.12); border:1px solid rgba(224,138,138,.3); white-space:nowrap; flex:0 0 auto; }
+.hidden-badge{ display:inline-flex; align-items:center; padding:2px 8px; border-radius:999px; font-size:.6rem; font-weight:500; letter-spacing:.1em; text-transform:uppercase; color:var(--text-dim); background:rgba(255,255,255,.06); border:1px solid var(--line-strong); white-space:nowrap; flex:0 0 auto; }
 .lb-name{ display:flex; align-items:center; gap:7px; }
 .profile-chip-name{ display:flex; align-items:center; gap:6px; }
 
@@ -1480,6 +1481,23 @@ var Profile = (function(){
     });
   }
 
+  // Keeps an account out of the public leaderboard without touching its
+  // memos, wins, or anything else — the account still functions normally,
+  // it just doesn't show up on the board. Used for staff/test accounts or
+  // anyone who asked to be left off it.
+  function adminSetLbHidden(targetEmail, hidden){
+    if(!isAdmin()) return Promise.reject(new Error("not admin"));
+    return adminFindByEmail(targetEmail).then(function(matches){
+      if(!matches.length) throw new Error("no account found for " + targetEmail);
+      return Promise.all(matches.map(function(m){
+        var ref = db.ref("users/" + m.uid);
+        return ref.update({ lbHidden: !!hidden }).then(function(){
+          return { uid: m.uid, email: m.email, name: m.name, lbHidden: !!hidden };
+        });
+      }));
+    });
+  }
+
   function renderChip(){
     get();
     $("chipAvatarImg").src = data.avatar;
@@ -1498,7 +1516,7 @@ var Profile = (function(){
     ownsTitle:ownsTitle, equippedTitle:equippedTitle, equipTitle:equipTitle, rollTitle:rollTitle, displayTitle:displayTitle,
     emote:emote, setEmote:setEmote, recordMatchResult:recordMatchResult, stats:stats,
     isAdmin:isAdmin, adminFindByEmail:adminFindByEmail, adminGrantMemos:adminGrantMemos,
-    adminSetMemos:adminSetMemos, adminSetTitle:adminSetTitle, adminSetBan:adminSetBan,
+    adminSetMemos:adminSetMemos, adminSetTitle:adminSetTitle, adminSetBan:adminSetBan, adminSetLbHidden:adminSetLbHidden,
     onBanned:onBanned, onUnbanned:onUnbanned
   };
 })();
@@ -2104,6 +2122,7 @@ function initFirebase(){
               window.setMemos = Profile.adminSetMemos;
               window.setTitle = Profile.adminSetTitle;
               window.banUser = Profile.adminSetBan;
+              window.hideFromLB = Profile.adminSetLbHidden;
               $("bAdmin").classList.remove("hidden");
               console.log(
                 "Admin commands ready.\n" +
@@ -2112,12 +2131,13 @@ function initFirebase(){
                 "  setMemos('someone@example.com', " + INF_MEMOS + ").then(console.log)  // absolute set, e.g. infinite\n" +
                 "  setTitle('someone@example.com', 'Founder').then(console.log)  // '' clears it\n" +
                 "  banUser('someone@example.com', true, 'reason').then(console.log)  // false to unban\n" +
+                "  hideFromLB('someone@example.com', true).then(console.log)  // false to unhide\n" +
                 "Or use the shield icon in the top bar for the same thing with a UI.\n" +
                 "Client-side gate only — see ADMIN_EMAILS comment for the real security story."
               );
             }else{
               delete window.grantMemos; delete window.findAccount;
-              delete window.setMemos; delete window.setTitle; delete window.banUser;
+              delete window.setMemos; delete window.setTitle; delete window.banUser; delete window.hideFromLB;
               $("bAdmin").classList.add("hidden");
             }
           }).catch(function(e){
@@ -3750,11 +3770,24 @@ document.addEventListener("DOMContentLoaded", function(){
     $("chatBadge").classList.add("hidden");
     $("chatInput").focus();
   }
+  var chatLastSentAt = 0;
+  var CHAT_COOLDOWN_MS = 700; // courtesy throttle — stops Enter-holding from hammering the db with writes
+
   function sendChatMessage(){
     var input = $("chatInput");
     var text = input.value.trim();
     if(!text || !room.ref) return;
-    text = text.slice(0,200);
+    var now = Date.now();
+    if(now - chatLastSentAt < CHAT_COOLDOWN_MS){
+      toast("Sending too fast — slow down.");
+      return;
+    }
+    // a plain single-line <input> can't normally hold a line break, but
+    // treat it as untrusted input anyway — collapse any that sneak in
+    // before it ever reaches the filter or the database.
+    text = text.replace(/[\r\n]+/g, " ").trim().slice(0,200);
+    if(!text) return;
+    chatLastSentAt = now;
     var clean = Filter.censor(text);
     if(clean !== text) toast("Watch the language — message filtered.");
     var p = Profile.get();
@@ -3839,10 +3872,11 @@ document.addEventListener("DOMContentLoaded", function(){
       $("lbList").innerHTML = '<p class="note">Firebase isn\'t configured yet, so there\'s no shared leaderboard to show.</p>';
       return;
     }
-    db.ref("users").orderByChild(LB_SORTS[lbSort].field).limitToLast(50).once("value").then(function(snap){
+    db.ref("users").orderByChild(LB_SORTS[lbSort].field).limitToLast(65).once("value").then(function(snap){
       var rows = [];
       snap.forEach(function(child){ rows.push(child.val()); });
       rows.reverse();
+      rows = rows.filter(function(r){ return !r.lbHidden; }).slice(0, 50);
       renderLeaderboardRows(rows);
     }).catch(function(e){
       console.error(e);
@@ -3884,11 +3918,13 @@ document.addEventListener("DOMContentLoaded", function(){
       row.dataset.title = r.title || "";
       row.dataset.banned = r.banned ? "1" : "";
       row.dataset.banReason = r.banReason || "";
+      row.dataset.lbHidden = r.lbHidden ? "1" : "";
       row.innerHTML =
         lbAvatarHTML(r)+
         '<span class="lb-name"><span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+escapeHtml(r.name||"Diver")+' <span style="color:var(--text-dim)">— '+escapeHtml(r.email||"")+'</span></span>'+
           (r.title ? '<span class="title-badge">'+escapeHtml(r.title)+'</span>' : "")+
-          (r.banned ? '<span class="ban-badge">Banned</span>' : "")+'</span>'+
+          (r.banned ? '<span class="ban-badge">Banned</span>' : "")+
+          (r.lbHidden ? '<span class="hidden-badge">Hidden</span>' : "")+'</span>'+
         '<span class="lb-memos"><img src="https://iili.io/noXdxMG.png" alt="" class="memos-icon">'+fmtMemos(r.memos||0)+'</span>';
       list.appendChild(row);
     });
@@ -3912,6 +3948,7 @@ document.addEventListener("DOMContentLoaded", function(){
     row.classList.add("open");
     var email = row.dataset.email;
     var isBanned = row.dataset.banned === "1";
+    var isLbHidden = row.dataset.lbHidden === "1";
     var form = document.createElement("div");
     form.className = "admin-grant-form";
     form.innerHTML =
@@ -3929,6 +3966,13 @@ document.addEventListener("DOMContentLoaded", function(){
         (isBanned
           ? '<span class="arow-label">Banned</span><span class="admin-ban-current" style="flex:1">'+escapeHtml(row.dataset.banReason||"no reason given")+'</span><button class="btn btn-ghost btn-small unbanBtn">Unban</button>'
           : '<span class="arow-label">Ban</span><input class="name-input banInput" type="text" placeholder="Reason for ban"><button class="btn btn-danger btn-small banBtn">Ban</button>')+
+      '</div>'+
+      '<div class="arow">'+
+        '<span class="arow-label">Leaderboard</span>'+
+        '<span style="flex:1">'+(isLbHidden ? "Hidden from the board" : "Shown on the board")+'</span>'+
+        (isLbHidden
+          ? '<button class="btn btn-ghost btn-small showLbBtn">Show</button>'
+          : '<button class="btn btn-ghost btn-small hideLbBtn">Hide</button>')+
       '</div>';
     var memoInput = form.querySelector(".memoInput");
     var giveBtn = form.querySelector(".giveBtn");
@@ -3937,6 +3981,8 @@ document.addEventListener("DOMContentLoaded", function(){
     var banInput = form.querySelector(".banInput");
     var banBtn = form.querySelector(".banBtn");
     var unbanBtn = form.querySelector(".unbanBtn");
+    var hideLbBtn = form.querySelector(".hideLbBtn");
+    var showLbBtn = form.querySelector(".showLbBtn");
     var note = document.createElement("div");
     note.className = "admin-grant-note";
     row.insertAdjacentElement("afterend", form);
@@ -4026,6 +4072,36 @@ document.addEventListener("DOMContentLoaded", function(){
           note.textContent = e.message || "Unban failed.";
           Sound.miss();
         }).then(function(){ unbanBtn.disabled = false; });
+      });
+    }
+    if(hideLbBtn){
+      hideLbBtn.addEventListener("click", function(){
+        hideLbBtn.disabled = true; note.textContent = "Hiding…";
+        Profile.adminSetLbHidden(email, true).then(function(){
+          note.textContent = "Done — hidden from the leaderboard.";
+          toast("Hid " + email + " from the leaderboard.");
+          Sound.hit(1);
+          closeAdminForm();
+          loadAdminList();
+        }).catch(function(e){
+          note.textContent = e.message || "Hide failed.";
+          Sound.miss();
+        }).then(function(){ hideLbBtn.disabled = false; });
+      });
+    }
+    if(showLbBtn){
+      showLbBtn.addEventListener("click", function(){
+        showLbBtn.disabled = true; note.textContent = "Showing…";
+        Profile.adminSetLbHidden(email, false).then(function(){
+          note.textContent = "Done — shown on the leaderboard again.";
+          toast("Restored " + email + " to the leaderboard.");
+          Sound.hit(1);
+          closeAdminForm();
+          loadAdminList();
+        }).catch(function(e){
+          note.textContent = e.message || "Show failed.";
+          Sound.miss();
+        }).then(function(){ showLbBtn.disabled = false; });
       });
     }
   });
