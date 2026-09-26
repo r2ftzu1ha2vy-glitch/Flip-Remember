@@ -209,7 +209,7 @@ button:focus-visible{ outline:2px solid var(--foam); outline-offset:4px; }
   display:flex; align-items:center; justify-content:center; font-size:15px; flex:0 0 auto; line-height:1; position:relative; }
 .profile-chip-ava img#chipAvatarImg{ width:100%; height:100%; object-fit:cover; border-radius:50%; }
 .profile-chip-info{ display:flex; flex-direction:column; align-items:flex-start; gap:1px; min-width:0; }
-.profile-chip-name{ font-size:.76rem; color:var(--text-soft); letter-spacing:.03em; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:120px; }
+.profile-chip-name{ font-size:.76rem; color:var(--text-soft); letter-spacing:.03em; max-width:120px; min-width:0; }
 .profile-chip-memos{ display:flex; align-items:center; gap:4px; font-size:.72rem; color:var(--sand); font-weight:400; }
 .memos-icon{ width:12px; height:12px; object-fit:contain; flex:0 0 auto; }
 .memos-icon-lg{ width:18px; height:18px; object-fit:contain; flex:0 0 auto; }
@@ -342,7 +342,9 @@ button:focus-visible{ outline:2px solid var(--foam); outline-offset:4px; }
 .ban-badge{ display:inline-flex; align-items:center; padding:2px 8px; border-radius:999px; font-size:.6rem; font-weight:500; letter-spacing:.1em; text-transform:uppercase; color:var(--coral); background:rgba(224,138,138,.12); border:1px solid rgba(224,138,138,.3); white-space:nowrap; flex:0 0 auto; }
 .hidden-badge{ display:inline-flex; align-items:center; padding:2px 8px; border-radius:999px; font-size:.6rem; font-weight:500; letter-spacing:.1em; text-transform:uppercase; color:var(--text-dim); background:rgba(255,255,255,.06); border:1px solid var(--line-strong); white-space:nowrap; flex:0 0 auto; }
 .lb-name{ display:flex; align-items:center; gap:7px; }
-.profile-chip-name{ display:flex; align-items:center; gap:6px; }
+.profile-chip-name{ display:flex; align-items:center; gap:6px; min-width:0; }
+.profile-chip-name-text{ white-space:nowrap; overflow:hidden; text-overflow:ellipsis; min-width:0; flex:1 1 auto; }
+.profile-chip-name .title-badge{ min-width:0; max-width:80px; overflow:hidden; text-overflow:ellipsis; flex:0 1 auto; }
 
 /* ===== multiplayer grid (3+ players) — everyone gets an equal-size card
    instead of two big panels plus a strip of tiny chips ===== */
@@ -416,6 +418,30 @@ button:focus-visible{ outline:2px solid var(--foam); outline-offset:4px; }
 @media (max-width:480px){
   .chat-panel{ right:10px; left:10px; width:auto; max-width:none; bottom:calc(80px + env(safe-area-inset-bottom,0px)); height:min(60vh,460px); max-height:60vh; }
   .chat-fab{ right:calc(14px + env(safe-area-inset-right,0px)); }
+
+  /* top bar: on a narrow phone, profile-chip + 3 icon buttons at their
+     desktop sizing don't fit inside the available width and the rightmost
+     icon gets pushed half off-screen. Shrink the chip and tighten spacing
+     so every icon stays fully reachable — legible name beats full name. */
+  .top-bar{ gap:6px; }
+  .top-bar-right{ gap:6px; }
+  .icon-btn, .audio-btn{ width:36px; height:36px; }
+  .profile-chip{ max-width:150px; gap:6px; padding:5px 10px 5px 5px; }
+  .profile-chip-ava{ width:24px; height:24px; }
+  .profile-chip-name{ max-width:100px; }
+  .profile-chip-name .title-badge{ max-width:56px; }
+
+  /* segmented controls (difficulty, cards, tabs): fixed desktop padding
+     made 4-option rows (Easy/Medium/Hard/Insane) wider than the viewport.
+     With overflow-x:hidden on the page, that meant "Easy" and part of
+     "Insane" were clipped off entirely — not just visually cramped, but
+     genuinely untappable. Shrink to fit, and make the row scrollable as a
+     fallback so an option can never be fully inaccessible again. */
+  .seg{ gap:3px; padding:4px; max-width:100%; overflow-x:auto; -webkit-overflow-scrolling:touch; scrollbar-width:none; }
+  .seg::-webkit-scrollbar{ display:none; }
+  .seg button{ padding:10px 13px; font-size:.83rem; flex:0 0 auto; }
+  .tab-seg{ max-width:100%; overflow-x:auto; -webkit-overflow-scrolling:touch; scrollbar-width:none; }
+  .tab-seg::-webkit-scrollbar{ display:none; }
 }
 </style>
 </head>
@@ -1502,7 +1528,7 @@ var Profile = (function(){
     get();
     $("chipAvatarImg").src = data.avatar;
     $("chipAvatarImg").style.display = "";
-    $("chipName").innerHTML = escapeHtml(data.name) + (displayTitle() ? ' <span class="title-badge">'+escapeHtml(displayTitle())+'</span>' : "");
+    $("chipName").innerHTML = '<span class="profile-chip-name-text">'+escapeHtml(data.name)+'</span>' + (displayTitle() ? ' <span class="title-badge">'+escapeHtml(displayTitle())+'</span>' : "");
     $("chipMemos").textContent = fmtMemos(data.memos);
     var yAva = $("pYouAvatar"), yLbl = $("youLabel");
     if(yAva){ yAva.src = data.avatar; yAva.classList.add("on"); }
