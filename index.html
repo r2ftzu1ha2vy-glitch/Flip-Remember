@@ -1089,6 +1089,8 @@ var Profile = (function(){
     if(typeof v.matchesPlayed === "number" && v.matchesPlayed !== data.matchesPlayed){ data.matchesPlayed = v.matchesPlayed; changed = true; }
     if(typeof v.streak === "number" && v.streak !== data.streak){ data.streak = v.streak; changed = true; }
     if(typeof v.bestStreak === "number" && v.bestStreak !== data.bestStreak){ data.bestStreak = v.bestStreak; changed = true; }
+    if(typeof v.suspendedUntil === "number" && v.suspendedUntil !== data.suspendedUntil){ data.suspendedUntil = v.suspendedUntil; changed = true; }
+    else if(!v.suspendedUntil && data.suspendedUntil){ data.suspendedUntil = 0; changed = true; }
     if(changed){
       try{ localStorage.setItem(KEY, JSON.stringify(data)); }catch(e){}
       renderChip();
@@ -1524,6 +1526,40 @@ var Profile = (function(){
     });
   }
 
+  function uid(){ return authUser ? authUser.uid : null; }
+
+  // Server-enforced strike/suspension state. Cached from the live account
+  // snapshot (handleAccountSnapshot below stores it onto `data`), so reads
+  // are instant; writes go through a transaction on users/{uid}/strikes so
+  // a client can't skip past the increment-by-1 rule the DB rules enforce.
+  var STRIKE_LIMIT = 10;
+  var SUSPEND_MS = 60 * 1000;
+
+  function isSuspended(){
+    return isSignedIn() && !!data && !!data.suspendedUntil && data.suspendedUntil > Date.now();
+  }
+  function suspendedSecondsLeft(){
+    if(!data || !data.suspendedUntil) return 0;
+    return Math.max(0, Math.ceil((data.suspendedUntil - Date.now()) / 1000));
+  }
+  // Called once per message the profanity filter had to censor. Returns a
+  // promise resolving to true if this strike just triggered a suspension.
+  // No-ops (resolves false) when signed out — anonymous play requires
+  // sign-in to begin with, so there's no account to attach a strike to.
+  function registerFilterStrike(){
+    if(!userRef) return Promise.resolve(false);
+    var strikesRef = userRef.child("strikes");
+    return strikesRef.transaction(function(cur){
+      var n = (cur || 0) + 1;
+      return n >= STRIKE_LIMIT ? 0 : n; // rules allow either +1 or a reset to 0
+    }).then(function(result){
+      if(!result.committed) return false;
+      var tripped = result.snapshot.val() === 0; // reset to 0 == this write crossed the limit
+      if(!tripped) return false;
+      return userRef.child("suspendedUntil").set(Date.now() + SUSPEND_MS).then(function(){ return true; });
+    }).catch(function(e){ console.error("registerFilterStrike failed:", e); return false; });
+  }
+
   function renderChip(){
     get();
     $("chipAvatarImg").src = data.avatar;
@@ -1543,7 +1579,8 @@ var Profile = (function(){
     emote:emote, setEmote:setEmote, recordMatchResult:recordMatchResult, stats:stats,
     isAdmin:isAdmin, adminFindByEmail:adminFindByEmail, adminGrantMemos:adminGrantMemos,
     adminSetMemos:adminSetMemos, adminSetTitle:adminSetTitle, adminSetBan:adminSetBan, adminSetLbHidden:adminSetLbHidden,
-    onBanned:onBanned, onUnbanned:onUnbanned
+    onBanned:onBanned, onUnbanned:onUnbanned,
+    uid:uid, isSuspended:isSuspended, suspendedSecondsLeft:suspendedSecondsLeft, registerFilterStrike:registerFilterStrike
   };
 })();
 
@@ -2205,6 +2242,8 @@ function blankSide(isBot, botLabel){
 
 function createRoom(maxPlayers){
   if(!initFirebase()){ netErr(); return; }
+  if(!Profile.isSignedIn()){ toast("Sign in to play online.", true); show("profile"); return; }
+  if(Profile.isSuspended()){ toast("You're suspended from online play for " + Profile.suspendedSecondsLeft() + "s.", true); return; }
   maxPlayers = Math.max(2, Math.min(6, maxPlayers || 2));
   $("bCreateRoom").disabled = true;
 
@@ -2248,6 +2287,8 @@ function createRoom(maxPlayers){
 
 function joinRoom(){
   if(!initFirebase()){ netErr(); return; }
+  if(!Profile.isSignedIn()){ toast("Sign in to play online.", true); show("profile"); return; }
+  if(Profile.isSuspended()){ toast("You're suspended from online play for " + Profile.suspendedSecondsLeft() + "s.", true); return; }
   var code = ($("joinCode").value || "").trim().toUpperCase();
   if(code.length !== 4){ toast("Enter the 4-character room code.", true); return; }
 
@@ -3402,8 +3443,18 @@ document.addEventListener("DOMContentLoaded", function(){
   $("howModal").addEventListener("click", function(e){ if(e.target === $("howModal")) $("howModal").classList.add("hidden"); });
   document.addEventListener("keydown", function(e){ if(e.key === "Escape") $("howModal").classList.add("hidden"); });
 
-  $("bCreate").addEventListener("click", function(){ Sound.init(); Sound.ui(); mode = "online"; show("roomsettings"); });
-  $("bJoin").addEventListener("click", function(){ Sound.init(); mode = "online"; joinRoom(); });
+  $("bCreate").addEventListener("click", function(){
+    Sound.init(); Sound.ui();
+    if(!Profile.isSignedIn()){ toast("Sign in to play online.", true); show("profile"); return; }
+    if(Profile.isSuspended()){ toast("You're suspended from online play for " + Profile.suspendedSecondsLeft() + "s.", true); return; }
+    mode = "online"; show("roomsettings");
+  });
+  $("bJoin").addEventListener("click", function(){
+    Sound.init();
+    if(!Profile.isSignedIn()){ toast("Sign in to play online.", true); show("profile"); return; }
+    if(Profile.isSuspended()){ toast("You're suspended from online play for " + Profile.suspendedSecondsLeft() + "s.", true); return; }
+    mode = "online"; joinRoom();
+  });
 
   var ROOM_SIZE_NOTES = {
     2:"Two players. Classic head-to-head.",
@@ -3758,45 +3809,12 @@ document.addEventListener("DOMContentLoaded", function(){
     return { test:containsProfanity, censor:censor };
   })();
 
-  // Filter-strike tracking + temporary chat suspension. Both are enforced
-  // client-side only (see the Filter note above — same caveat applies:
-  // this stops normal play, not a determined rule-breaker in devtools).
-  var STRIKE_KEY = "df_chat_strikes";
-  var SUSPEND_KEY = "df_chat_suspend_until";
-  var STRIKE_LIMIT = 10;
-  var SUSPEND_MS = 60 * 1000;
-
-  function getStrikes(){
-    try{ return parseInt(localStorage.getItem(STRIKE_KEY) || "0", 10) || 0; }catch(e){ return 0; }
-  }
-  function setStrikes(n){
-    try{ localStorage.setItem(STRIKE_KEY, String(n)); }catch(e){}
-  }
-  function getSuspendedUntil(){
-    try{ return parseInt(localStorage.getItem(SUSPEND_KEY) || "0", 10) || 0; }catch(e){ return 0; }
-  }
-  function setSuspendedUntil(ts){
-    try{ localStorage.setItem(SUSPEND_KEY, String(ts)); }catch(e){}
-  }
-  function isChatSuspended(){
-    return Date.now() < getSuspendedUntil();
-  }
-  function chatSuspendSecondsLeft(){
-    return Math.max(0, Math.ceil((getSuspendedUntil() - Date.now()) / 1000));
-  }
-  // Call after a message got censored. Bumps the strike count and, once it
-  // crosses the limit, suspends chat for SUSPEND_MS and resets the counter
-  // so the next offense starts a fresh count.
-  function registerFilterStrike(){
-    var n = getStrikes() + 1;
-    if(n >= STRIKE_LIMIT){
-      setSuspendedUntil(Date.now() + SUSPEND_MS);
-      setStrikes(0);
-      return true; // just tripped the suspension
-    }
-    setStrikes(n);
-    return false;
-  }
+  // Chat-suspension display timer. The actual strike count and suspension
+  // timestamp live in Firebase now (Profile.registerFilterStrike /
+  // Profile.isSuspended), enforced by the DB rules on room-slot writes —
+  // clearing localStorage does nothing to lift it.
+  function isChatSuspended(){ return Profile.isSuspended(); }
+  function chatSuspendSecondsLeft(){ return Profile.suspendedSecondsLeft(); }
 
   function resetChatUI(){
     $("chatMessages").innerHTML = '<p class="chat-empty">No messages yet — say hi.</p>';
@@ -3853,7 +3871,7 @@ document.addEventListener("DOMContentLoaded", function(){
     var text = input.value.trim();
     if(!text || !room.ref) return;
     if(isChatSuspended()){
-      toast("Chat suspended for " + chatSuspendSecondsLeft() + "s for repeated language violations.", true);
+      toast("Suspended from online play for " + chatSuspendSecondsLeft() + "s for repeated language violations.", true);
       return;
     }
     var now = Date.now();
@@ -3869,13 +3887,17 @@ document.addEventListener("DOMContentLoaded", function(){
     chatLastSentAt = now;
     var clean = Filter.censor(text);
     if(clean !== text){
-      var justSuspended = registerFilterStrike();
-      if(justSuspended){
-        toast("Too many filtered messages — chat suspended for 1 minute.", true);
-        input.value = "";
-        return; // the offending message itself is dropped, not sent censored
-      }
-      toast("Watch the language — message filtered.");
+      input.value = "";
+      Profile.registerFilterStrike().then(function(justSuspended){
+        if(justSuspended){
+          toast("Too many filtered messages — suspended from online play for 1 minute.", true);
+          detachRoom(); // suspension takes effect immediately, mid-match included
+          goMenu();
+        }else{
+          toast("Watch the language — message filtered.");
+        }
+      });
+      return; // the offending message itself is dropped, not sent censored
     }
     var p = Profile.get();
     room.ref.child("chat").push({ by: room.role, name: p.name || "Player", text: clean, ts: Date.now() }).catch(function(){});
