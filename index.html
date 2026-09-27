@@ -58,6 +58,8 @@ button:focus-visible{ outline:2px solid var(--foam); outline-offset:4px; }
 .btn-row{ display:flex; gap:14px; margin-top:32px; flex-wrap:wrap; justify-content:center; }
 
 .seg{ display:flex; gap:4px; padding:5px; border-radius:999px; background:rgba(255,255,255,.03); border:1px solid var(--line); backdrop-filter:blur(8px); }
+#diffSeg{ flex-wrap:wrap; justify-content:center; border-radius:22px; max-width:320px; }
+#diffSeg button{ padding:11px 18px; }
 .seg button{ padding:11px 24px; border-radius:999px; background:transparent; color:var(--text-dim); font-size:.95rem; font-weight:300; letter-spacing:.05em; transition:color .3s,background .3s; }
 .seg button.active{ color:var(--abyss); background:linear-gradient(105deg,var(--foam),#9fe1d3); }
 .seg button:not(.active):hover{ color:var(--text-soft); }
@@ -360,6 +362,8 @@ button:focus-visible{ outline:2px solid var(--foam); outline-offset:4px; }
 .mp-card.you.turn{ border-color:rgba(127,216,196,.45); box-shadow:0 0 28px rgba(127,216,196,.16); }
 .mp-card.gone{ opacity:.4; }
 .mp-card.bot .mp-name{ opacity:.85; }
+.mp-card.spectator-tag{ justify-content:center; opacity:.7; border-style:dashed; }
+.mp-card.spectator-tag .mp-name{ letter-spacing:.14em; }
 .mp-ring{ position:relative; flex:0 0 auto; width:46px; height:46px; }
 .mp-ring svg{ width:100%; height:100%; }
 .mp-count{ position:absolute; inset:0; display:flex; align-items:center; justify-content:center; font-size:.92rem; font-weight:400; }
@@ -543,6 +547,7 @@ button:focus-visible{ outline:2px solid var(--foam); outline-offset:4px; }
         <button data-diff="medium" class="active">Medium</button>
         <button data-diff="hard">Hard</button>
         <button data-diff="insane">Insane</button>
+        <button data-diff="adaptive">Adaptive</button>
       </div>
       <span class="note" id="diffNote">A steady opponent. It remembers about half of what it sees.</span>
 
@@ -567,6 +572,7 @@ button:focus-visible{ outline:2px solid var(--foam); outline-offset:4px; }
       <div class="btn-row" style="margin-top:14px">
         <button class="btn btn-primary" id="bCreate">Create room</button>
         <button class="btn btn-ghost" id="bJoin">Join room</button>
+        <button class="btn btn-ghost hidden" id="bWatchRoom">Watch this room</button>
       </div>
     </div>
 
@@ -708,7 +714,7 @@ button:focus-visible{ outline:2px solid var(--foam); outline-offset:4px; }
       <div class="hud-top">
         <p class="hud-mark">FLIP &amp; REMEMBER</p>
         <p class="hud-sub" id="hudSub">Find the numbers in order. First to 15 wins.</p>
-        <p class="room-tag hidden" id="roomTag">ROOM <b id="roomTagCode">----</b></p>
+        <p class="room-tag hidden" id="roomTag">ROOM <b id="roomTagCode">----</b><span class="hidden" id="spectatorTag"> — SPECTATING</span></p>
       </div>
 
       <div class="status-row">
@@ -918,11 +924,22 @@ var FIREBASE_CONFIG = {
 var TOTAL = 15;
 var RING = 2 * Math.PI * 23;
 var DIFF = {
-  easy:   { recall:.22, slip:.30, tMin:220, tMax:420, reward:10, note:"A forgetful opponent. It mostly guesses and rarely holds a map." },
-  medium: { recall:.58, slip:.15, tMin:200, tMax:380, reward:25, note:"A steady opponent. It remembers about half of what it sees." },
-  hard:   { recall:.90, slip:.07, tMin:180, tMax:340, reward:40, note:"A sharp opponent. It remembers nearly every disc it has turned." },
-  insane: { recall:.97, slip:.03, tMin:130, tMax:240, reward:65, note:"A relentless opponent. It forgets almost nothing and moves fast — expect a bigger payout if you can beat it." }
+  easy:     { recall:.22, slip:.30, tMin:220, tMax:420, reward:10, note:"A forgetful opponent. It mostly guesses and rarely holds a map." },
+  medium:   { recall:.58, slip:.15, tMin:200, tMax:380, reward:25, note:"A steady opponent. It remembers about half of what it sees." },
+  hard:     { recall:.90, slip:.07, tMin:180, tMax:340, reward:40, note:"A sharp opponent. It remembers nearly every disc it has turned." },
+  insane:   { recall:.97, slip:.03, tMin:130, tMax:240, reward:65, note:"A relentless opponent. It forgets almost nothing and moves fast — expect a bigger payout if you can beat it." },
+  adaptive: { recall:.35, slip:.20, tMin:170, tMax:360, reward:80,
+              note:"A learning opponent. Every run it survives sharpens its memory — the longer its last streak, the more of that streak it opens with next time." }
 };
+/* adaptive tier tuning: how much each card of the AI's last hit-streak
+   raises its recall / cuts its slip on the *next* run, and the ceiling
+   and floor those can reach. A streak of 5 correct discs makes the next
+   run open almost perfectly on the first 5 numbers, then taper back to
+   the tier's base rates for anything beyond what it already proved it knew. */
+var ADAPTIVE_RECALL_PER_STREAK = .09, ADAPTIVE_SLIP_CUT_PER_STREAK = .028;
+var ADAPTIVE_RECALL_CAP = .985, ADAPTIVE_SLIP_FLOOR = .01;
+var aiLastStreak = 0;   // length of the AI's best hit-streak on its previous run
+var aiStreakRun  = 0;   // hits landed so far in the AI's current uninterrupted run
 var ONLINE_REWARD = 50;
 var COST_AVATAR = 50, COST_USERNAME = 100;
 var COST_THEME_ROLL = 50, DUPLICATE_THEME_REFUND = 15;
@@ -1605,7 +1622,7 @@ Profile.onBanned(function(reason){
 Profile.onUnbanned(function(){
   hideBannedScreen();
 });
-var room = { code:null, role:null, ref:null, seenMove:0, seenResult:0, rematchMine:false, bots:{}, botMoving:false, lastData:null };
+var room = { code:null, role:null, ref:null, seenMove:0, seenResult:0, rematchMine:false, bots:{}, botMoving:false, lastData:null, isSpectator:false, specId:null, specRef:null };
 var pendingRoomSize = 2;
 var onEmoteReceived = function(d){}; // wired up in DOMContentLoaded, called from onRoom
 var resetEmoteBubbles = function(){}; // wired up in DOMContentLoaded, called from startOnlineGame
@@ -1958,6 +1975,7 @@ function shuffle(n){
 function buildBoard(preset){
   boardEl.innerHTML = "";
   discs = []; done = new Set(); aiMap = new Map();
+  aiStreakRun = 0; // aiLastStreak deliberately survives — that's the adaptive tier's memory across runs within a game
   values = (preset && preset.length === TOTAL) ? preset.slice() : shuffle(TOTAL);
 
   values.forEach(function(val, i){
@@ -2026,6 +2044,7 @@ function say(text, kind){ msgEl.textContent = text; msgEl.className = "message" 
 
 /* ===================== turn handling ===================== */
 function tap(i){
+  if(room.isSpectator) return;
   if(over || locked || turn !== "you") return;
   if(!discs[i] || done.has(i) || discs[i].disc.classList.contains("up")) return;
 
@@ -2069,8 +2088,21 @@ function youMiss(i){
 }
 
 /* ===================== AI (solo) ===================== */
+// Adaptive tier only: recall/slip for *this* pick, boosted by how far into
+// its remembered streak the AI already is. foeTarget-1 is the number of
+// correct discs it's found so far this run — as long as that's still
+// within the streak length it proved last time, it plays close to
+// perfectly; past that point it falls back to the tier's base numbers.
+function adaptiveCfg(){
+  var base = DIFF.adaptive;
+  var withinProvenStreak = (foeTarget - 1) < aiLastStreak;
+  if(!withinProvenStreak) return base;
+  var recall = Math.min(ADAPTIVE_RECALL_CAP, base.recall + aiLastStreak * ADAPTIVE_RECALL_PER_STREAK);
+  var slip   = Math.max(ADAPTIVE_SLIP_FLOOR,  base.slip   - aiLastStreak * ADAPTIVE_SLIP_CUT_PER_STREAK);
+  return { recall:recall, slip:slip, tMin:base.tMin, tMax:base.tMax };
+}
 function aiPick(){
-  var cfg = DIFF[difficulty], open = [], i;
+  var cfg = difficulty === "adaptive" ? adaptiveCfg() : DIFF[difficulty], open = [], i;
   for(i=0;i<TOTAL;i++) if(!done.has(i)) open.push(i);
 
   var known = null;
@@ -2111,6 +2143,10 @@ function foeHit(i, isAi){
   lockIn(i);
   Sound.hit(foeBest+1);
   foeBest++; foeTarget++;
+  if(isAi && difficulty === "adaptive"){
+    aiStreakRun++;
+    if(aiStreakRun > aiLastStreak) aiLastStreak = aiStreakRun; // banks the new high-water mark immediately, so even a streak broken by a later miss this same run has already raised the bar for the AI's *next* run
+  }
   hud();
   if(foeBest >= TOTAL){
     say(isAi ? "The AI closed the sequence." : "Your opponent closed the sequence.","bad");
@@ -2125,6 +2161,7 @@ function foeMiss(i, isAi){
   discs[i].slot.classList.add("miss");
   paint(i,"miss");
   Sound.miss();
+  if(isAi && difficulty === "adaptive") aiStreakRun = 0; // this run is over; aiLastStreak already holds its best result and will bias the AI's next run
   say((isAi ? "The AI turned " : "Opponent turned ") + discs[i].value + ". They restart at 1.","good");
   later(function(){
     foeBest = 0; foeTarget = 1; hud(); closeAll();
@@ -2150,12 +2187,17 @@ function foeMiss(i, isAi){
      move        { slot, by, seq }         latest flip, for the animation
      result      { slot, by, kind, value, seq }
      p1..p6      { online, isBot, progress, target, rematch, name, avatar }
+     spectators  { "<specId>": { name, avatar } }   watch-only presence, no game-state writes
 
    p1 is always the creator and the only slot that ever runs host-side logic
    (advancing a stalled rematch, and driving every bot's moves — bots have no
    client of their own, so p1's browser computes and writes their turns).
    Otherwise, only the player whose turn it is writes game state, so there is
    never a write conflict — everyone else just animates what they receive.
+   Spectators only ever write their own spectators/{specId} entry (added on
+   join, removed via onDisconnect or on leaving) — they read everything else
+   through the same room listener as players but never touch p1..p6, board,
+   turn, move, result, or winner.
    ======================================================================= */
 function initFirebase(){
   if(fbReady) return true;
@@ -2250,7 +2292,7 @@ function createRoom(maxPlayers){
   var code = makeCode();
   db.ref("rooms/"+code).once("value").then(function(snap){
     if(snap.exists()) code = makeCode(); // one retry is plenty for 1M combos
-    room.code = code; room.role = "p1";
+    room.code = code; room.role = "p1"; room.isSpectator = false; room.specId = null; room.specRef = null;
     room.seenMove = 0; room.seenResult = 0; room.rematchMine = false;
     room.bots = {}; room.botMoving = false; room.lastData = null;
     room.ref = db.ref("rooms/"+code);
@@ -2298,16 +2340,73 @@ function joinRoom(){
   ref.once("value").then(function(snap){
     if(!snap.exists()){ toast("No room with that code.", true); return; }
     var d0 = snap.val();
-    if(d0.status !== "waiting"){ toast("That room has already started.", true); return; }
+    if(d0.status !== "waiting"){
+      pendingSpectateCode = code;
+      toast("That room has already started.", true);
+      $("bWatchRoom").classList.remove("hidden");
+      return;
+    }
     var max = d0.maxPlayers || 2, candidates = [];
     for(var n=2;n<=max;n++){ var k="p"+n; if(!d0[k]) candidates.push(k); }
-    if(!candidates.length){ toast("That room is already full.", true); return; }
+    if(!candidates.length){
+      pendingSpectateCode = code;
+      toast("That room is already full.", true);
+      $("bWatchRoom").classList.remove("hidden");
+      return;
+    }
     return claimSlot(ref, code, candidates, 0, max);
   }).catch(function(e){
     console.error(e);
     toast("Could not join — check your database rules.", true);
   }).then(function(){
     $("bCreate").disabled = false; $("bJoin").disabled = false;
+  });
+}
+
+/* ===================== spectating ===================== */
+// Spectators never occupy a p-slot and never write game state — they just
+// attach a presence entry (for the "N watching" count) and ride the exact
+// same onRoom() stream every player gets, rendered read-only. Works whether
+// the room is still full-but-waiting or already mid-match.
+var pendingSpectateCode = null;
+
+function spectateRoom(code){
+  if(!initFirebase()){ netErr(); return; }
+  if(!Profile.isSignedIn()){ toast("Sign in to spectate online.", true); show("profile"); return; }
+  code = (code || "").trim().toUpperCase();
+  if(code.length !== 4){ toast("Enter the 4-character room code.", true); return; }
+
+  $("bWatchRoom").disabled = true;
+  var ref = db.ref("rooms/"+code);
+  ref.once("value").then(function(snap){
+    if(!snap.exists()){ toast("No room with that code.", true); return; }
+    var d0 = snap.val();
+    if(d0.status === "waiting"){ toast("That room hasn't started yet — nothing to watch.", true); return; }
+
+    var p = Profile.get();
+    var specId = "s" + Date.now().toString(36) + Math.floor(Math.random()*1000);
+    var specRef = ref.child("spectators").child(specId);
+
+    room.code = code; room.role = null; room.isSpectator = true;
+    room.specId = specId; room.specRef = specRef;
+    room.seenMove = 0; room.seenResult = 0; room.rematchMine = false;
+    room.bots = {}; room.botMoving = false; room.lastData = null;
+    room.ref = ref;
+    started = false;
+    mode = "online";
+
+    return specRef.set({ name:p.name, avatar:p.avatar }).then(function(){
+      specRef.onDisconnect().remove();
+      Sound.join();
+      attachRoom();
+      pendingSpectateCode = null;
+      $("bWatchRoom").classList.add("hidden");
+    });
+  }).catch(function(e){
+    console.error(e);
+    toast("Could not connect to that room.", true);
+  }).then(function(){
+    $("bWatchRoom").disabled = false;
   });
 }
 
@@ -2328,7 +2427,7 @@ function claimSlot(ref, code, candidates, idx, max){
     if(!result.committed){
       return claimSlot(ref, code, candidates, idx+1, max); // slot taken, or rejected — move on
     }
-    room.code = code; room.role = slot;
+    room.code = code; room.role = slot; room.isSpectator = false; room.specId = null; room.specRef = null;
     room.seenMove = 0; room.seenResult = 0; room.rematchMine = false;
     room.bots = {}; room.botMoving = false; room.lastData = null;
     room.ref = ref;
@@ -2405,6 +2504,18 @@ function otherHumanOnline(d, myRole){
 
 function detachRoom(){
   if(room.ref){
+    if(room.isSpectator){
+      // spectators never own the room and never hold a slot — just drop
+      // the one presence entry we added, leaving the match untouched for
+      // everyone actually playing it.
+      room.ref.off();
+      detachChat();
+      try{
+        if(room.specRef){ room.specRef.onDisconnect().cancel(); room.specRef.remove().catch(function(){}); }
+      }catch(e){ console.error("Spectator detach failed:", e); }
+      room = { code:null, role:null, ref:null, seenMove:0, seenResult:0, rematchMine:false, bots:{}, botMoving:false, lastData:null, isSpectator:false, specId:null, specRef:null };
+      return;
+    }
     var ref = room.ref, role = room.role, wasHost = (role === "p1"), lastData = room.lastData;
     room.ref.off();
     detachChat();
@@ -2427,7 +2538,7 @@ function detachRoom(){
       }
     }catch(e){ console.error("detachRoom cleanup failed:", e); }
   }
-  room = { code:null, role:null, ref:null, seenMove:0, seenResult:0, rematchMine:false, bots:{}, botMoving:false, lastData:null };
+  room = { code:null, role:null, ref:null, seenMove:0, seenResult:0, rematchMine:false, bots:{}, botMoving:false, lastData:null, isSpectator:false, specId:null, specRef:null };
 }
 
 /* live roster row shown in the lobby while waiting for players */
@@ -2468,7 +2579,7 @@ function renderGameRoster(d){
   var statusRow = document.querySelector(".status-row");
   if(!el) return;
   var max = d.maxPlayers || 2;
-  if(max <= 2){
+  if(max <= 2 && !room.isSpectator){
     el.classList.add("hidden"); el.classList.remove("multi-grid"); el.innerHTML = "";
     if(statusRow) statusRow.classList.remove("hidden");
     return;
@@ -2481,7 +2592,7 @@ function renderGameRoster(d){
     var k = "p"+n;
     var s = d[k];
     if(!s) continue;
-    var isMe = (k === room.role);
+    var isMe = !room.isSpectator && (k === room.role);
     var progress = s.progress || 0, target = s.target || 1;
     var pct = TOTAL ? Math.max(0, Math.min(1, progress/TOTAL)) : 0;
     var off = (CIRC * (1 - pct)).toFixed(1);
@@ -2507,6 +2618,15 @@ function renderGameRoster(d){
       '</div>';
     el.appendChild(card);
   }
+  if(room.isSpectator){
+    var specCount = d.spectators ? Object.keys(d.spectators).length : 0;
+    if(specCount > 0){
+      var tag = document.createElement("div");
+      tag.className = "mp-card spectator-tag";
+      tag.innerHTML = '<div class="mp-meta"><span class="mp-name">'+specCount+' watching</span></div>';
+      el.appendChild(tag);
+    }
+  }
   el.classList.remove("hidden");
 }
 
@@ -2522,9 +2642,14 @@ function allHumansReady(d){
 
 function onRoom(snap){
   var d = snap.val();
-  if(!d){ if(mode === "online"){ toast("The room was closed.", true); goMenu(); } return; }
+  if(!d){ if(mode === "online"){ toast(room.isSpectator ? "The room closed." : "The room was closed.", true); goMenu(); } return; }
   var prevData = room.lastData; // snapshot from before this update, needed below to tell "slot removed" from "slot never existed"
   room.lastData = d;
+
+  /* spectators never own a p-slot and never write game state — they just
+     watch whatever's already there via the generic multi-player roster,
+     which needs no "me"/"foe" concept at all. */
+  if(room.isSpectator){ onRoomSpectator(d); return; }
 
   var me = d[room.role] || blankSide(false);
 
@@ -2742,6 +2867,11 @@ function startOnlineGame(d){
   room.rematchMine = false;
   youBest = 0; foeBest = 0; youTarget = 1; foeTarget = 1;
   turn = (d.turn === room.role) ? "you" : "foe";
+  $("bQuit").textContent = "LEAVE GAME";
+  $("bMenu").textContent = "Main menu";
+  $("bAgain").classList.remove("hidden");
+  $("spectatorTag").classList.add("hidden");
+  boardEl.classList.remove("spectate");
   applyEquippedTheme();
   buildBoard(d.board);
   updateCountTexts();
@@ -2763,6 +2893,111 @@ function startOnlineGame(d){
   hud();
   show("game");
   say(turn === "you" ? "Your turn. Flip a disc." : "Your opponent moves first.", turn === "you" ? "" : "foe");
+}
+
+/* ===================== spectating: room sync ===================== */
+// Spectators have no "me" or "foe" — just N players on a shared board — so
+// rather than replaying the you/foe turn machinery, every snapshot fully
+// reconciles the board to d.board/d.open and the roster to d itself. Simpler
+// than trying to thread a real player's turn state through code that was
+// built assuming exactly one local participant, and just as accurate since
+// Firebase already gives us the authoritative state on every update.
+function startSpectating(d){
+  clearTimers();
+  TOTAL = d.totalCards || 15;
+  over = false; locked = true; flipCount = 0;
+  applyEquippedTheme();
+  buildBoard(d.board);
+  updateCountTexts();
+  $("emoteWrap").classList.add("hidden");
+  var statusRow = document.querySelector(".status-row");
+  if(statusRow) statusRow.classList.add("hidden");
+  $("roomTag").classList.remove("hidden");
+  $("roomTagCode").textContent = room.code;
+  $("gameRoster").classList.remove("hidden");
+  boardEl.classList.add("spectate");
+  $("spectatorTag").classList.remove("hidden");
+  $("bQuit").textContent = "STOP WATCHING";
+  show("game");
+  say("Watching — spectator mode.","");
+}
+function onRoomSpectator(d){
+  if(!started){
+    started = true;
+    startSpectating(d);
+  }
+  if(d.status === "waiting"){ say("Waiting for players — the match hasn't started yet.",""); return; }
+
+  TOTAL = d.totalCards || 15;
+
+  /* reconcile every disc to the authoritative board state */
+  var openMap = d.open || {};
+  discs.forEach(function(disc, i){
+    var shouldBeOpen = !!openMap[i];
+    if(shouldBeOpen && !done.has(i)) lockIn(i);
+  });
+
+  /* show the very latest flip, win or lose, for anyone at the table */
+  if(d.move && d.move.seq > room.seenMove){
+    room.seenMove = d.move.seq;
+    if(discs[d.move.slot] && !discs[d.move.slot].disc.classList.contains("up")){
+      flipUp(d.move.slot, "foe");
+      Sound.flipFoe();
+    }
+  }
+  if(d.result && d.result.seq > room.seenResult){
+    room.seenResult = d.result.seq;
+    var who = (d[d.result.by] && d[d.result.by].name) || d.result.by;
+    if(d.result.kind === "hit"){
+      say(who + " found " + d.result.value + ".","foe");
+    }else{
+      var ri = d.result.slot;
+      if(discs[ri]){ discs[ri].slot.classList.add("miss"); paint(ri,"miss"); }
+      say(who + " turned " + d.result.value + " — board resets.","bad");
+      later(function(){
+        if(!started || !room.isSpectator) return;
+        closeAll();
+        var stillOpen = room.lastData ? (room.lastData.open || {}) : {};
+        Object.keys(stillOpen).forEach(function(k){ var i=parseInt(k,10); if(discs[i]) lockIn(i); });
+      }, 700);
+    }
+  }
+
+  renderGameRoster(d);
+
+  if(d.status === "rematch"){ say("Players are deciding on a rematch…",""); return; }
+
+  if(d.winner){
+    var winnerName = (d[d.winner] && d[d.winner].name) || d.winner;
+    say(winnerName + " completed the sequence.","good");
+    if(!over){
+      over = true;
+      later(function(){
+        show("end");
+        $("endTitle").textContent = winnerName.toUpperCase() + " WINS";
+        $("endTitle").className = "end-title win";
+        $("endMsg").textContent = winnerName + " completed the sequence first.";
+        $("crest").innerHTML = crestWin();
+        var statsBlock = document.querySelector("#s-end .end-stats");
+        if(statsBlock) statsBlock.classList.add("hidden");
+        $("streakNote").classList.add("hidden");
+        $("rematchNote").classList.add("hidden");
+        $("bAgain").classList.add("hidden");
+        $("bMenu").textContent = "Stop watching";
+      }, 500);
+    }
+    return;
+  }
+
+  /* a fresh round started after a rematch, or after we joined mid-game */
+  if(over && d.status === "playing"){
+    over = false;
+    var statsBlock2 = document.querySelector("#s-end .end-stats");
+    if(statsBlock2) statsBlock2.classList.remove("hidden");
+    $("bAgain").classList.remove("hidden");
+    $("bMenu").textContent = "Main menu";
+    startSpectating(d);
+  }
 }
 
 function netSendMove(i){
@@ -3053,6 +3288,7 @@ function newSolo(){
   TOTAL = cardCount;
   over = false; locked = false; flipCount = 0;
   youBest = 0; foeBest = 0; youTarget = 1; foeTarget = 1; turn = "you";
+  aiLastStreak = 0; aiStreakRun = 0; // brand-new game — adaptive AI starts from a clean memory
   applyEquippedTheme();
   buildBoard();
   $("foeLabel").textContent = "AI";
@@ -3065,6 +3301,10 @@ function newSolo(){
   $("gameRoster").classList.add("hidden");
   $("gameRoster").classList.remove("multi-grid");
   $("gameRoster").innerHTML = "";
+  $("bQuit").textContent = "LEAVE GAME";
+  $("bMenu").textContent = "Main menu";
+  $("bAgain").classList.remove("hidden");
+  $("spectatorTag").classList.add("hidden");
   updateCountTexts();
   $("emoteWrap").classList.add("hidden");
   hud(); show("game");
@@ -3076,6 +3316,7 @@ function goMenu(){
   over = true; started = false;
   if(room.ref) detachRoom();
   $("rematchNote").classList.add("hidden");
+  $("bWatchRoom").classList.add("hidden");
   show("menu");
 }
 
@@ -3461,7 +3702,13 @@ document.addEventListener("DOMContentLoaded", function(){
     Sound.init();
     if(!Profile.isSignedIn()){ toast("Sign in to play online.", true); show("profile"); return; }
     if(Profile.isSuspended()){ toast("You're suspended from online play for " + Profile.suspendedSecondsLeft() + "s.", true); return; }
+    $("bWatchRoom").classList.add("hidden");
     mode = "online"; joinRoom();
+  });
+  $("joinCode").addEventListener("input", function(){ $("bWatchRoom").classList.add("hidden"); });
+  $("bWatchRoom").addEventListener("click", function(){
+    Sound.init();
+    spectateRoom(pendingSpectateCode || $("joinCode").value);
   });
 
   var ROOM_SIZE_NOTES = {
@@ -3510,13 +3757,15 @@ document.addEventListener("DOMContentLoaded", function(){
 
   $("bAgain").addEventListener("click", function(){
     Sound.init();
+    if(room.isSpectator) return;
     if(mode === "online" && room.ref) requestRematch();
     else newSolo();
   });
   $("bMenu").addEventListener("click", goMenu);
 
   window.addEventListener("beforeunload", function(){
-    if(room.ref) room.ref.child(room.role+"/online").set(false);
+    if(room.ref && !room.isSpectator) room.ref.child(room.role+"/online").set(false);
+    if(room.ref && room.isSpectator && room.specRef) room.specRef.remove();
   });
 
   /* ===== collection: card themes (gacha roll + inventory) ===== */
@@ -3914,7 +4163,7 @@ document.addEventListener("DOMContentLoaded", function(){
             else ref.child(room.role).onDisconnect().cancel();
           }catch(e){}
           if(ref){ ref.remove().catch(function(e){ console.error("Room delete failed on suspension:", e); }); }
-          room = { code:null, role:null, ref:null, seenMove:0, seenResult:0, rematchMine:false, bots:{}, botMoving:false, lastData:null };
+          room = { code:null, role:null, ref:null, seenMove:0, seenResult:0, rematchMine:false, bots:{}, botMoving:false, lastData:null, isSpectator:false, specId:null, specRef:null };
           goMenu();
         }else{
           toast("Watch the language — message filtered.");
