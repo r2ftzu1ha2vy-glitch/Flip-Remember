@@ -337,6 +337,10 @@ button:focus-visible{ outline:2px solid var(--foam); outline-offset:4px; }
 .admin-grant-form .arow{ display:flex; align-items:center; gap:8px; }
 .admin-grant-form .arow-label{ flex:0 0 56px; font-size:.66rem; letter-spacing:.1em; color:var(--text-dim); text-transform:uppercase; }
 .admin-grant-form input{ flex:1; min-width:0; }
+.admin-grant-form .admin-stats-row{ flex-wrap:wrap; }
+.admin-grant-form .admin-stats-row input{ flex:1 1 64px; min-width:56px; }
+.admin-grant-form .admin-stats-row .arow-label{ flex:0 0 auto; }
+.admin-grant-form .admin-stats-row button{ flex:0 0 auto; margin-left:auto; }
 .admin-grant-form .btn-danger{ color:var(--coral); background:rgba(224,138,138,.1); border:1px solid rgba(224,138,138,.35); }
 .admin-grant-form .btn-danger:hover{ background:rgba(224,138,138,.18); }
 .admin-grant-note{ font-size:.78rem; color:var(--text-dim); padding:0 16px 8px 16px; }
@@ -847,7 +851,7 @@ button:focus-visible{ outline:2px solid var(--foam); outline-offset:4px; }
   <div class="screen hidden" id="s-admin">
     <div style="margin-top:7vh"></div>
     <h2 style="font-weight:200; letter-spacing:.2em; font-size:1.3rem; margin:0">ADMIN</h2>
-    <p class="note" style="margin-top:8px">Click a player to grant/dock memos (or give infinite with "inf"), set a title, or ban them.</p>
+    <p class="note" style="margin-top:8px">Click a player to grant/dock memos (or give infinite with "inf"), correct their win/loss stats, set a title, or ban them.</p>
     <div class="lb-list" id="adminList"></div>
     <div class="btn-row" style="margin-top:36px; margin-bottom:20px">
       <button class="btn btn-ghost" id="bAdminBack">Back</button>
@@ -1459,7 +1463,11 @@ var Profile = (function(){
       var out = [];
       snap.forEach(function(child){
         var v = child.val() || {};
-        out.push({ uid: child.key, memos: v.memos || 0, name: v.name || "", email: v.email || "" });
+        out.push({
+          uid: child.key, memos: v.memos || 0, name: v.name || "", email: v.email || "",
+          wins: v.wins || 0, losses: v.losses || 0, matchesPlayed: v.matchesPlayed || 0,
+          streak: v.streak || 0, bestStreak: v.bestStreak || 0
+        });
       });
       return out;
     });
@@ -1569,6 +1577,64 @@ var Profile = (function(){
     });
   }
 
+  // Directly overwrites an account's win/loss record — for correcting stats
+  // that were padded by an exploit (e.g. the pre-patch adaptive-bot glitch),
+  // as opposed to adminGrantMemos/adminSetMemos which only ever touch the
+  // memo balance. Every field is optional: pass only the ones that need
+  // correcting and the rest are left as-is. matchesPlayed, when not given
+  // explicitly, is recomputed as wins+losses so the two never drift out of
+  // sync after a correction — but an explicit value always wins, since a
+  // real account can have matchesPlayed higher than wins+losses (draws,
+  // disconnects, whatever else was ever counted as "played" without a
+  // recorded result).
+  function adminSetStats(targetEmail, patch){
+    if(!isAdmin()) return Promise.reject(new Error("not admin"));
+    patch = patch || {};
+    var fields = ["wins","losses","matchesPlayed","streak","bestStreak"];
+    var given = {};
+    for(var i=0;i<fields.length;i++){
+      var f = fields[i];
+      if(patch[f] === undefined || patch[f] === null || patch[f] === "") continue;
+      var n = Number(patch[f]);
+      if(!isFinite(n) || n < 0 || Math.floor(n) !== n) return Promise.reject(new Error(f + " must be a whole number, 0 or more."));
+      given[f] = n;
+    }
+    if(!Object.keys(given).length) return Promise.reject(new Error("Enter at least one value to change."));
+    return adminFindByEmail(targetEmail).then(function(matches){
+      if(!matches.length) throw new Error("no account found for " + targetEmail);
+      return Promise.all(matches.map(function(m){
+        var ref = db.ref("users/" + m.uid);
+        var update = {};
+        fields.forEach(function(f){ if(given[f] !== undefined) update[f] = given[f]; });
+        if(update.matchesPlayed === undefined && (update.wins !== undefined || update.losses !== undefined)){
+          update.matchesPlayed = (update.wins !== undefined ? update.wins : m.wins) + (update.losses !== undefined ? update.losses : m.losses);
+        }
+        return ref.update(update).then(function(){
+          return ref.child("ledger").push({
+            reason: ("admin_set_stats: " + Object.keys(update).map(function(f){ return f+":"+update[f]; }).join(", ")).slice(0, 40),
+            delta: 0,
+            balance: m.memos || 0,
+            grantedBy: authUser.email,
+            ts: firebase.database.ServerValue.TIMESTAMP
+          });
+        }).then(function(){
+          if(authUser && m.email === authUser.email){
+            Object.keys(update).forEach(function(f){ data[f] = update[f]; });
+            save(); renderChip();
+          }
+          return {
+            uid: m.uid, email: m.email, name: m.name,
+            wins: update.wins !== undefined ? update.wins : m.wins,
+            losses: update.losses !== undefined ? update.losses : m.losses,
+            matchesPlayed: update.matchesPlayed !== undefined ? update.matchesPlayed : m.matchesPlayed,
+            streak: update.streak !== undefined ? update.streak : m.streak,
+            bestStreak: update.bestStreak !== undefined ? update.bestStreak : m.bestStreak
+          };
+        });
+      }));
+    });
+  }
+
   function uid(){ return authUser ? authUser.uid : null; }
 
   // Server-enforced strike/suspension state. Cached from the live account
@@ -1622,6 +1688,7 @@ var Profile = (function(){
     emote:emote, setEmote:setEmote, recordMatchResult:recordMatchResult, stats:stats,
     isAdmin:isAdmin, adminFindByEmail:adminFindByEmail, adminGrantMemos:adminGrantMemos,
     adminSetMemos:adminSetMemos, adminSetTitle:adminSetTitle, adminSetBan:adminSetBan, adminSetLbHidden:adminSetLbHidden,
+    adminSetStats:adminSetStats,
     onBanned:onBanned, onUnbanned:onUnbanned,
     uid:uid, isSuspended:isSuspended, suspendedSecondsLeft:suspendedSecondsLeft, registerFilterStrike:registerFilterStrike
   };
@@ -2254,6 +2321,7 @@ function initFirebase(){
               window.setTitle = Profile.adminSetTitle;
               window.banUser = Profile.adminSetBan;
               window.hideFromLB = Profile.adminSetLbHidden;
+              window.setStats = Profile.adminSetStats;
               $("bAdmin").classList.remove("hidden");
               console.log(
                 "Admin commands ready.\n" +
@@ -2263,12 +2331,14 @@ function initFirebase(){
                 "  setTitle('someone@example.com', 'Founder').then(console.log)  // '' clears it\n" +
                 "  banUser('someone@example.com', true, 'reason').then(console.log)  // false to unban\n" +
                 "  hideFromLB('someone@example.com', true).then(console.log)  // false to unhide\n" +
+                "  setStats('someone@example.com', {wins:3, losses:5}).then(console.log)  // any of wins/losses/matchesPlayed/streak/bestStreak, only what you pass changes\n" +
                 "Or use the shield icon in the top bar for the same thing with a UI.\n" +
                 "Client-side gate only — see ADMIN_EMAILS comment for the real security story."
               );
             }else{
               delete window.grantMemos; delete window.findAccount;
               delete window.setMemos; delete window.setTitle; delete window.banUser; delete window.hideFromLB;
+              delete window.setStats;
               $("bAdmin").classList.add("hidden");
             }
           }).catch(function(e){
@@ -2284,6 +2354,7 @@ function initFirebase(){
           Profile.detachAccount();
           delete window.grantMemos; delete window.findAccount;
           delete window.setMemos; delete window.setTitle; delete window.banUser;
+          delete window.hideFromLB; delete window.setStats;
           $("bAdmin").classList.add("hidden");
         }
       });
@@ -4339,6 +4410,11 @@ document.addEventListener("DOMContentLoaded", function(){
       row.dataset.banned = r.banned ? "1" : "";
       row.dataset.banReason = r.banReason || "";
       row.dataset.lbHidden = r.lbHidden ? "1" : "";
+      row.dataset.wins = r.wins || 0;
+      row.dataset.losses = r.losses || 0;
+      row.dataset.matchesPlayed = r.matchesPlayed || 0;
+      row.dataset.streak = r.streak || 0;
+      row.dataset.bestStreak = r.bestStreak || 0;
       row.innerHTML =
         lbAvatarHTML(r)+
         '<span class="lb-name"><span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+escapeHtml(r.name||"Diver")+' <span style="color:var(--text-dim)">— '+escapeHtml(r.email||"")+'</span></span>'+
@@ -4369,6 +4445,10 @@ document.addEventListener("DOMContentLoaded", function(){
     var email = row.dataset.email;
     var isBanned = row.dataset.banned === "1";
     var isLbHidden = row.dataset.lbHidden === "1";
+    var curWins = row.dataset.wins || "0";
+    var curLosses = row.dataset.losses || "0";
+    var curStreak = row.dataset.streak || "0";
+    var curBestStreak = row.dataset.bestStreak || "0";
     var form = document.createElement("div");
     form.className = "admin-grant-form";
     form.innerHTML =
@@ -4376,6 +4456,20 @@ document.addEventListener("DOMContentLoaded", function(){
         '<span class="arow-label">Memos</span>'+
         '<input class="name-input memoInput" type="text" placeholder="Amount, or \'inf\' for infinite (negative to dock)">'+
         '<button class="btn btn-primary btn-small giveBtn">Give</button>'+
+      '</div>'+
+      '<div class="arow admin-stats-row">'+
+        '<span class="arow-label">Wins</span>'+
+        '<input class="name-input statWinsInput" type="text" inputmode="numeric" placeholder="'+curWins+'">'+
+        '<span class="arow-label">Losses</span>'+
+        '<input class="name-input statLossesInput" type="text" inputmode="numeric" placeholder="'+curLosses+'">'+
+        '<button class="btn btn-ghost btn-small statsBtn">Set</button>'+
+      '</div>'+
+      '<div class="arow admin-stats-row">'+
+        '<span class="arow-label">Streak</span>'+
+        '<input class="name-input statStreakInput" type="text" inputmode="numeric" placeholder="'+curStreak+'">'+
+        '<span class="arow-label">Best</span>'+
+        '<input class="name-input statBestStreakInput" type="text" inputmode="numeric" placeholder="'+curBestStreak+'">'+
+        '<button class="btn btn-ghost btn-small statsBtn2">Set</button>'+
       '</div>'+
       '<div class="arow">'+
         '<span class="arow-label">Title</span>'+
@@ -4396,6 +4490,12 @@ document.addEventListener("DOMContentLoaded", function(){
       '</div>';
     var memoInput = form.querySelector(".memoInput");
     var giveBtn = form.querySelector(".giveBtn");
+    var statWinsInput = form.querySelector(".statWinsInput");
+    var statLossesInput = form.querySelector(".statLossesInput");
+    var statsBtn = form.querySelector(".statsBtn");
+    var statStreakInput = form.querySelector(".statStreakInput");
+    var statBestStreakInput = form.querySelector(".statBestStreakInput");
+    var statsBtn2 = form.querySelector(".statsBtn2");
     var titleInput = form.querySelector(".titleInput");
     var titleBtn = form.querySelector(".titleBtn");
     var banInput = form.querySelector(".banInput");
@@ -4436,6 +4536,46 @@ document.addEventListener("DOMContentLoaded", function(){
     }
     giveBtn.addEventListener("click", applyMemos);
     memoInput.addEventListener("keydown", function(e){ if(e.key === "Enter") applyMemos(); });
+
+    // Shared by both "Set" buttons in the stats section: reads whichever of
+    // the four stat inputs currently has something typed in it, sends only
+    // those to adminSetStats (matchesPlayed is recomputed server-side from
+    // wins+losses when either of those changes and matchesPlayed itself
+    // wasn't also given), and updates the row's memo/dataset cache so a
+    // second edit in the same session starts from the corrected numbers
+    // instead of the stale ones the list was first loaded with.
+    function applyStats(){
+      var patch = {};
+      if(statWinsInput.value.trim() !== "") patch.wins = statWinsInput.value.trim();
+      if(statLossesInput.value.trim() !== "") patch.losses = statLossesInput.value.trim();
+      if(statStreakInput.value.trim() !== "") patch.streak = statStreakInput.value.trim();
+      if(statBestStreakInput.value.trim() !== "") patch.bestStreak = statBestStreakInput.value.trim();
+      if(!Object.keys(patch).length){ note.textContent = "Enter at least one value to change."; return; }
+      statsBtn.disabled = true; statsBtn2.disabled = true; note.textContent = "Applying…";
+      Profile.adminSetStats(email, patch).then(function(results){
+        var r = results[0];
+        if(r){
+          row.dataset.wins = r.wins; row.dataset.losses = r.losses;
+          row.dataset.matchesPlayed = r.matchesPlayed;
+          row.dataset.streak = r.streak; row.dataset.bestStreak = r.bestStreak;
+          statWinsInput.placeholder = r.wins; statLossesInput.placeholder = r.losses;
+          statStreakInput.placeholder = r.streak; statBestStreakInput.placeholder = r.bestStreak;
+        }
+        note.textContent = "Done — " + Object.keys(patch).map(function(f){ return f + " set to " + patch[f]; }).join(", ") + ".";
+        toast("Updated " + email + "'s stats.");
+        statWinsInput.value = ""; statLossesInput.value = "";
+        statStreakInput.value = ""; statBestStreakInput.value = "";
+        Sound.hit(1);
+      }).catch(function(e){
+        note.textContent = e.message || "Stat update failed.";
+        Sound.miss();
+      }).then(function(){ statsBtn.disabled = false; statsBtn2.disabled = false; });
+    }
+    statsBtn.addEventListener("click", applyStats);
+    statsBtn2.addEventListener("click", applyStats);
+    [statWinsInput, statLossesInput, statStreakInput, statBestStreakInput].forEach(function(inp){
+      inp.addEventListener("keydown", function(e){ if(e.key === "Enter") applyStats(); });
+    });
 
     function applyTitle(){
       var t = titleInput.value.trim();
