@@ -1309,11 +1309,24 @@ var Profile = (function(){
   // once a uid has been linked on this device, later reloads just adopt the
   // remote value as-is instead of adding to it.
   function attachAccount(user){
+    if(!user){ authUser = null; stopRecoveryWatch(); lockedOut = false; userRef = null; renderChip(); return Promise.resolve(); }
+    // If a different account was attached (or even just linked on this
+    // device previously) and something calls attachAccount for a new uid
+    // without detachAccount running in between — a direct account switch
+    // that skips an explicit sign-out — start this account clean instead of
+    // merging whatever's sitting in local storage from the last one. That
+    // stale "local" data is exactly what caused wins/memos to double up
+    // across accounts; detachAccount() closes the normal sign-out path, and
+    // this closes the same hole for a switch that never goes through it.
+    // The actual wipe is deferred until after we confirm the incoming
+    // account isn't banned (below) — a failed/rejected sign-in shouldn't
+    // cost the previous session its local data.
+    var linkedUid = (function(){ try{ return localStorage.getItem(LINK_KEY); }catch(e){ return null; } })();
+    var isAccountSwitch = !!(linkedUid && linkedUid !== user.uid);
     authUser = user;
-    if(!user){ stopRecoveryWatch(); lockedOut = false; userRef = null; renderChip(); return Promise.resolve(); }
     stopRecoveryWatch();
     userRef = db.ref("users/" + user.uid);
-    var local = get();
+    var local = isAccountSwitch ? def() : get();
     var alreadyLinked = (function(){ try{ return localStorage.getItem(LINK_KEY) === user.uid; }catch(e){ return false; } })();
     var mergeLogged = null;
     var signupBonusLogged = null;
@@ -1411,12 +1424,25 @@ var Profile = (function(){
     });
   }
 
+  // Sign-out must never leave this account's synced data sitting in the
+  // plain "local" storage slot, or the next account to sign in on this
+  // device would see it as "guest progress" and merge it straight into
+  // their own balance (see the LINK_KEY note above attachAccount — this is
+  // the other half of that same bug: it doesn't just need to be guarded on
+  // attach, it needs to actually be cleared on detach). So sign-out always
+  // starts the next guest session from a brand-new blank profile, and drops
+  // LINK_KEY so a different account signing in afterwards runs the normal
+  // one-time merge instead of silently "already linked"-skipping into a
+  // stranger's leftover numbers.
   function detachAccount(){
     unwatchBan();
     stopRecoveryWatch();
     lockedOut = false;
     authUser = null; userRef = null;
-    load(); renderChip();
+    try{ localStorage.removeItem(LINK_KEY); }catch(e){}
+    data = def();
+    try{ localStorage.setItem(KEY, JSON.stringify(data)); }catch(e){}
+    renderChip();
   }
 
   function isAdmin(){ return !!authUser && ADMIN_EMAILS.indexOf(authUser.email) !== -1; }
@@ -3731,7 +3757,20 @@ document.addEventListener("DOMContentLoaded", function(){
   $("bPlayWithBots").addEventListener("click", function(){ Sound.init(); Sound.ui(); fillWithBots(); });
   $("joinCode").addEventListener("keydown", function(e){ if(e.key === "Enter") $("bJoin").click(); });
   $("joinCode").addEventListener("input", function(e){
-    e.target.value = e.target.value.toUpperCase().replace(/[^A-Z0-9]/g,"");
+    var el = e.target;
+    var raw = el.value;
+    var clean = raw.toUpperCase().replace(/[^A-Z0-9]/g,"");
+    if(clean === raw) return; // already clean — leave value/cursor untouched (this is the common case on every normal keystroke)
+    // Reassigning .value resets the caret to position 0 on many mobile
+    // keyboards, which — combined with maxlength — made fast typing push
+    // earlier characters out the far end instead of just appending. Only
+    // rewrite when something actually needs stripping/uppercasing, and put
+    // the caret back where it would have naturally ended up.
+    var caret = el.selectionStart;
+    var removedBeforeCaret = raw.slice(0, caret).length - raw.slice(0, caret).toUpperCase().replace(/[^A-Z0-9]/g,"").length;
+    el.value = clean;
+    var newPos = Math.max(0, caret - removedBeforeCaret);
+    el.setSelectionRange(newPos, newPos);
   });
 
   $("bCopy").addEventListener("click", function(){
