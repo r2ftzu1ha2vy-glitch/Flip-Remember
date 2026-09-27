@@ -1454,15 +1454,28 @@ var Profile = (function(){
   // Looks up account(s) by email under users/ (requires an index on "email"
   // in the Firebase rules for this to be fast at scale — fine as-is for a
   // small user base). Resolves to an array of { uid, memos, name, email }.
+  // Case-insensitive lookup: Realtime Database's equalTo() is an exact,
+  // case-sensitive match, but the email a signed-in user ends up with
+  // (Firebase Auth doesn't normalize case) can differ in capitalization
+  // from what an admin types into the console commands. Querying by the
+  // lowercased needle against the stored value used to silently return
+  // zero rows whenever the two didn't match byte-for-byte (e.g.
+  // "Jane@Example.com" stored vs "jane@example.com" typed), which made
+  // every admin action — including hiding someone from the leaderboard —
+  // fail with "no account found" for no visible reason. Pulling the whole
+  // users list and comparing lowercased is a little more expensive than an
+  // indexed query, but this only runs for rare admin lookups, so
+  // correctness wins over the extra read.
   function adminFindByEmail(targetEmail){
     if(!isAdmin()) return Promise.reject(new Error("not admin"));
     if(!db) return Promise.reject(new Error("firebase not initialized"));
     var needle = String(targetEmail || "").trim().toLowerCase();
     if(!needle) return Promise.reject(new Error("no email given"));
-    return db.ref("users").orderByChild("email").equalTo(needle).once("value").then(function(snap){
+    return db.ref("users").once("value").then(function(snap){
       var out = [];
       snap.forEach(function(child){
         var v = child.val() || {};
+        if(String(v.email || "").trim().toLowerCase() !== needle) return;
         out.push({
           uid: child.key, memos: v.memos || 0, name: v.name || "", email: v.email || "",
           wins: v.wins || 0, losses: v.losses || 0, matchesPlayed: v.matchesPlayed || 0,
